@@ -6,6 +6,7 @@ import aiohttp
 import json
 import g4f
 
+from openai import OpenAI
 from twitchio.ext import commands
 from howlongtobeatpy import HowLongToBeat
 from dotenv import load_dotenv
@@ -34,6 +35,12 @@ HUMAN_DELAY_MIN = 1.3
 HUMAN_DELAY_MAX = 2.8
 
 HLTB_CACHE = {}
+
+
+client = OpenAI(
+    api_key=os.getenv("OPENROUTER_API_KEY"),
+    base_url="https://openrouter.ai/api/v1"
+)
 
 # Загружаем праздники при старте бота
 with open("holidays.json", "r", encoding="utf-8") as f:
@@ -70,6 +77,31 @@ async def process_gpt_answer(raw_answer: str) -> str:
     if not answer:  # если после фильтров пусто
         answer = "MrDestructoid GPT ответил пусто после фильтров"
     return answer
+
+async def ask_openrouter(prompt: str) -> str:
+    try:
+        response = client.chat.completions.create(
+            model="arcee-ai/trinity-large-preview:free",
+            messages=[
+                {
+                    "role": "system",
+                    "content": "Отвечай кратко, не более 150 символов. Не используй непристойные слова и запрещённые "
+                               "на Twitch выражения. Откажись отвечать, если вопрос касается политики или религии."
+                },
+                {
+                    "role": "user",
+                    "content": prompt
+                }
+            ],
+            max_tokens=80,
+            temperature=0.7,
+        )
+
+        return response.choices[0].message.content.strip()
+
+    except Exception as e:
+        print(f"OpenRouter error: {e}")
+        return "Не удалось получить ответ"
 
 async def ask_gpt(prompt: str) -> str:
     loop = asyncio.get_running_loop()
@@ -179,24 +211,24 @@ class Bot(commands.Bot):
 
     @commands.command(name="вопрос")
     async def question_command(self, ctx, *, question: str = None):
-        # проверяем, что пользователь разрешён
-        user = ctx.author.name.lower()
+
+        user = ctx.author.name.lower()    # проверяем, что пользователь разрешён
         if user not in ALLOWED_USERS:
             return
 
-        if not question:
+        if not question:    # проверяем есть ли тело вопроса
             await ctx.send("MrDestructoid Используй: !вопрос <текст>")
             return
 
-        if len(question) > 200:
+        if len(question) > 200:    # проверяем длину вопроса
             await ctx.send("MrDestructoid Вопрос слишком длинный")
             return
 
-        if "http://" in question or "https://" in question:
+        if "http://" in question or "https://" in question:    # проверяем, что нет ссылок
             await ctx.send("MrDestructoid Ссылки запрещены")
             return
 
-        if not await self.check_gpt_cooldown(ctx):
+        if not await self.check_gpt_cooldown(ctx):    # проверяем кулдаун
             return
 
         await asyncio.sleep(random.uniform(HUMAN_DELAY_MIN, HUMAN_DELAY_MAX))
@@ -215,7 +247,7 @@ class Bot(commands.Bot):
             await ctx.send(f"MrDestructoid {answer}")
 
         except Exception as e:
-            print("g4f error:", e)
+            print("gpt error:", e)
             await ctx.send("MrDestructoid GPT временно недоступен")
 
 
