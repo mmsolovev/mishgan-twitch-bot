@@ -16,7 +16,7 @@ class Bot(commands.Bot):
     async def event_ready(self):
         load_commands(self)
 
-        print(f"✅ Bot connected as {self.nick}")
+        print(f"✅ Bot connected as {self.nick} to {TWITCH_CHANNEL}")
         print(f"📜 Commands loaded: {list(self.commands.keys())}")
 
     async def event_message(self, message):
