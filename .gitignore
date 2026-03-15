@@ -215,3 +215,5 @@ __marimo__/
 
 /.tio.tokens.json
 /har_and_cookies/models/
+/storage/holidays.json
+/storage/streams.json
