@@ -9,6 +9,7 @@ TWITCH_NICK = os.getenv("TWITCH_NICK")
 TWITCH_CHANNEL = os.getenv("TWITCH_CHANNEL")
 CLIENT_ID = os.getenv("CLIENT_ID")
 CLIENT_SECRET = os.getenv("CLIENT_SECRET")
+RAWG_API_KEY = os.getenv("RAWG_API_KEY")
 
 BOT_PREFIX = "!"
 SIGN="MrDestructoid"
