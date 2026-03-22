@@ -69,3 +69,34 @@ def upload_streams():
         ],
         rows=rows
     )
+
+def append_unique_rows(sheet, rows, key_indexes):
+    """
+    key_indexes — индексы колонок для уникальности
+    """
+
+    existing = sheet.get_all_values()
+
+    if not existing:
+        sheet.append_rows(rows)
+        return
+
+    existing_keys = set()
+
+    for row in existing[1:]:
+        key = tuple(row[i] for i in key_indexes if i < len(row))
+        existing_keys.add(key)
+
+    new_rows = []
+
+    for row in rows:
+        key = tuple(str(row[i]) for i in key_indexes)
+
+        if key not in existing_keys:
+            new_rows.append(row)
+
+    if new_rows:
+        sheet.append_rows(new_rows)
+        print(f"Added {len(new_rows)} new rows")
+    else:
+        print("No new rows")
