@@ -216,3 +216,18 @@ __marimo__/
 /.tio.tokens.json
 /har_and_cookies/models/
 
+# Local project secrets and generated data
+/config/credentials.json
+/storage/cache/*.json
+/storage/config/*.json
+/storage/censorship/*.json
+/storage/streams.db
+/storage/streams.json
+/storage/games.json
+/storage/holidays.json
+/storage/pages/
+
+!/storage/cache/*.example.json
+!/storage/config/*.example.json
+!/storage/censorship/*.example.json
+
