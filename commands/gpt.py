@@ -2,7 +2,8 @@ import asyncio
 
 from twitchio.ext import commands
 
-from config.settings import ALLOWED_USERS
+from config.settings import ADMINS
+from services.command_registry import register_command
 from services.gpt_service import ask_gpt
 from utils.cooldowns import check_cooldown
 from utils.delays import human_delay
@@ -10,11 +11,17 @@ from utils.delays import human_delay
 
 def setup(bot):
 
+    register_command(
+        "gpt",
+        "Команда: !gpt [вопрос] - задать вопрос нейронке",
+        "mod"
+    )
+
     @commands.command(name="gpt")
     async def gpt_command(ctx, *, question: str = None):
 
         user = ctx.author.name.lower()    # проверяем, что пользователь разрешён
-        if user not in ALLOWED_USERS:
+        if user not in ADMINS:
             return
 
         if not question:    # проверяем есть ли тело вопроса

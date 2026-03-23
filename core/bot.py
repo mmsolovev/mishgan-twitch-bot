@@ -5,6 +5,7 @@ import time
 from twitchio.ext import commands
 from core.registry import load_commands
 from config.settings import BOT_PREFIX, TWITCH_TOKEN, TWITCH_NICK, TWITCH_CHANNEL
+from services import runtime
 
 
 class Bot(commands.Bot):
@@ -30,11 +31,15 @@ class Bot(commands.Bot):
         if not message.author:
             return
 
-        # логируем только команды
+        # лог команд
         if message.content.startswith(self._prefix):
             print(f"[CMD] {message.author.name}: {message.content}")
 
-        # передаём сообщение дальше,
+        # ❗ если бот выключен — игнорируем ВСЁ кроме !старт
+        if not runtime.BOT_ENABLED:
+            if not message.content.startswith(f"{self._prefix}старт"):
+                return
+
         await self.handle_commands(message)
 
     async def event_raw_usernotice(self, channel, tags):

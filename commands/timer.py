@@ -1,6 +1,8 @@
 from twitchio.ext import commands
 import asyncio
 
+from config.settings import ALLOWED_USERS
+from services.command_registry import register_command
 from utils.cooldowns import check_cooldown
 from utils.delays import human_delay
 
@@ -14,7 +16,7 @@ from services.timer_service import (
 )
 
 
-ALLOWED_USERS = {"mishgan_sol", "tabula", "orfeylefontu", "wraith8", "kampacha", "angrys2l"}
+
 
 
 def has_access(ctx) -> bool:
@@ -22,6 +24,12 @@ def has_access(ctx) -> bool:
 
 
 def setup(bot):
+
+    register_command(
+        "таймер",
+        "Команда: !таймер [время] [текст] | стоп | список | возврат (для Steam)",
+        "mod"
+    )
 
     @commands.command(name="таймер")
     async def timer_command(ctx):
