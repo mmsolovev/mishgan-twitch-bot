@@ -14,4 +14,5 @@ RAWG_API_KEY = os.getenv("RAWG_API_KEY")
 BOT_PREFIX = "!"
 SIGN="MrDestructoid"
 COOLDOWN = 60
-ALLOWED_USERS = ["mishgan_sol", "tabula", "orfeylefontu"]
+ADMINS = ["mishgan_sol", "tabula", "orfeylefontu"]
+ALLOWED_USERS = {"mishgan_sol", "tabula", "orfeylefontu", "wraith8", "kampacha", "angrys2l"}
