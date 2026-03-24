@@ -1,0 +1,13 @@
+{
+  "streamer": {
+    "summary": "Basic public info about the streamer goes here."
+  },
+  "setup": {
+    "pc": {
+      "summary": "Short summary of the current streaming and gaming setup."
+    },
+    "devices": {
+      "summary": "Short summary of the current devices."
+    }
+  }
+}

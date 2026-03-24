@@ -1,11 +1,29 @@
 from difflib import get_close_matches
 import json
 from functools import lru_cache
+from pathlib import Path
+
+
+STORAGE_DIR = Path("storage")
+INFO_PATH = STORAGE_DIR / "info.json"
+INFO_EXAMPLE_PATH = STORAGE_DIR / "info.example.json"
+ALIASES_PATH = STORAGE_DIR / "info_aliases.json"
 
 
 @lru_cache
 def load_info():
-    with open("storage/info.json", encoding="utf-8") as f:
+    path = INFO_PATH if INFO_PATH.exists() else INFO_EXAMPLE_PATH
+
+    with path.open(encoding="utf-8") as f:
+        return json.load(f)
+
+
+@lru_cache
+def load_aliases():
+    if not ALIASES_PATH.exists():
+        return {}
+
+    with ALIASES_PATH.open(encoding="utf-8") as f:
         return json.load(f)
 
 
@@ -40,7 +58,9 @@ def fuzzy(query, keys):
 
 def resolve_query(query: str):
     data = load_info()
+    aliases = load_aliases()
     query = query.lower()
+    query = aliases.get(query, query)
 
     keys = collect_keys(data)
 
