@@ -5,6 +5,7 @@ def load_commands(bot):
     from commands.timer import setup as timer_setup
     from commands.admin import setup as admin_setup
     from commands.help import setup as help_setup
+    from commands.info import setup as info_setup
 
     hltb_setup(bot)
     holiday_setup(bot)
@@ -12,3 +13,4 @@ def load_commands(bot):
     timer_setup(bot)
     admin_setup(bot)
     help_setup(bot)
+    info_setup(bot)
