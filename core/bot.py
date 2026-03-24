@@ -2,10 +2,11 @@ import asyncio
 import random
 import time
 
+import services.runtime as runtime
+
 from twitchio.ext import commands
 from core.registry import load_commands
 from config.settings import BOT_PREFIX, TWITCH_TOKEN, TWITCH_NICK, TWITCH_CHANNEL
-from services import runtime
 
 
 class Bot(commands.Bot):

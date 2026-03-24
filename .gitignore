@@ -231,3 +231,4 @@ __marimo__/
 !/storage/config/*.example.json
 !/storage/censorship/*.example.json
 
+/storage/info.json
