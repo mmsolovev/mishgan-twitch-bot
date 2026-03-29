@@ -1,6 +1,20 @@
 from database.db import SessionLocal
 from database.models import Game, GameStats, Stream
-from services.google_sheets_service import upload_table, format_dt
+from services.google_sheets_service import upload_table, format_dt, get_client
+from services.sheets_header_builder import build_header
+
+
+
+def setup_sheet(sheet_name: str):
+    client = get_client()
+    spreadsheet = client.open("Twitch Stats")
+
+    try:
+        sheet = spreadsheet.worksheet(sheet_name)
+    except:
+        sheet = spreadsheet.add_worksheet(title=sheet_name, rows="1000", cols="20")
+
+    build_header(sheet)
 
 
 def upload_games():
