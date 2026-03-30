@@ -2,8 +2,10 @@ import json
 import os
 from datetime import datetime
 
+from sqlalchemy import func
+
 from database.db import SessionLocal
-from database.models import Stream, Game, GameStats
+from database.models import Stream, Game, GameStats, StreamGame
 
 BASE_DIR = os.path.dirname(os.path.dirname(__file__))
 streams_path = os.path.join(BASE_DIR, "storage", "streams.json")
@@ -34,10 +36,8 @@ def import_streams(session):
 
     for s in streams:
 
-        # --- дата ---
         date = parse_date(s["date"])
 
-        # --- стрим ---
         stream = Stream(
             date=date,
             duration=clean_float_duration(s["duration"]),
@@ -49,10 +49,10 @@ def import_streams(session):
         )
 
         session.add(stream)
-        session.flush()  # чтобы получить stream.id
+        session.flush()
 
-        # --- игры ---
-        for game_name in s["games"]:
+        # ✅ ВАЖНО: порядок через enumerate
+        for i, game_name in enumerate(s["games"]):
 
             game = session.query(Game).filter_by(name=game_name).first()
 
@@ -61,7 +61,32 @@ def import_streams(session):
                 session.add(game)
                 session.flush()
 
-            stream.games.append(game)
+            stream.stream_games.append(
+                StreamGame(
+                    game=game,
+                    position=i
+                )
+            )
+
+
+def update_streams_count(session):
+    results = (
+        session.query(
+            StreamGame.game_id,
+            func.count(StreamGame.stream_id)
+        )
+        .group_by(StreamGame.game_id)
+        .all()
+    )
+
+    for game_id, count in results:
+        stats = session.query(GameStats).filter_by(
+            game_id=game_id,
+            period="all"
+        ).first()
+
+        if stats:
+            stats.streams_count = count
 
 
 def import_games_stats(session):
@@ -82,12 +107,13 @@ def import_games_stats(session):
 
         stats = GameStats(
             game_id=game.id,
-            rank=g["rank"],
+            period="all",
             hours_streamed=g["hours_streamed"],
             avg_viewers=g["avg_viewers"],
             max_viewers=g["max_viewers"],
             followers_per_hour=g["followers_per_hour"],
-            last_stream=parse_last_stream(g["last_stream"])
+            last_stream=parse_last_stream(g["last_stream"]),
+            streams_count=0
         )
 
         session.merge(stats)  # чтобы обновлялось если уже есть
@@ -99,6 +125,9 @@ def run():
 
     print("Importing streams...")
     import_streams(session)
+
+    print("Updating streams count...")
+    update_streams_count(session)
 
     print("Importing game stats...")
     import_games_stats(session)

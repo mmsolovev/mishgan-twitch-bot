@@ -1,16 +1,10 @@
-from services.google_sheets_service import get_client
-from services.sheets_header_builder import build_header
+from services.sheets_sync_service import sync_streams, sync_games
 
 
-def run():
-    client = get_client()
-    spreadsheet = client.open("Twitch Stats")
-
-    # выбери нужный лист
-    sheet = spreadsheet.worksheet("Стримы")  # или "Игры"
-
-    build_header(sheet)
+def run_all():
+    sync_streams()
+    sync_games()
 
 
 if __name__ == "__main__":
-    run()
+    run_all()

@@ -1,15 +1,9 @@
 from sqlalchemy import Column, Integer, String, Float, Table, ForeignKey, DateTime, Boolean
+from sqlalchemy.ext.associationproxy import association_proxy
 from sqlalchemy.orm import relationship
 
 from database.db import Base
 
-
-stream_games = Table(
-    "stream_games",
-    Base.metadata,
-    Column("stream_id", Integer, ForeignKey("streams.id")),
-    Column("game_id", Integer, ForeignKey("games.id"))
-)
 
 stream_participants = Table(
     "stream_participants",
@@ -25,7 +19,8 @@ class Game(Base):
     id = Column(Integer, primary_key=True)
     name = Column(String, unique=True, index=True)
 
-    streams = relationship("Stream", secondary=stream_games, back_populates="games")
+    stream_games = relationship("StreamGame")
+    meta = relationship("GameMeta", uselist=False, back_populates="game")
 
 
 class Stream(Base):
@@ -50,12 +45,26 @@ class Stream(Base):
     vod_url = Column(String, nullable=True)
     clips_url = Column(String, nullable=True)
 
-    games = relationship("Game", secondary=stream_games, back_populates="streams")
-    participants = relationship(
-        "Participant",
-        secondary=stream_participants,
-        back_populates="streams"
+    stream_games = relationship(
+        "StreamGame",
+        order_by="StreamGame.position",
+        cascade="all, delete-orphan",
+        back_populates="stream"
     )
+
+    games = association_proxy("stream_games", "game")
+
+
+class StreamGame(Base):
+    __tablename__ = "stream_games"
+
+    stream_id = Column(ForeignKey("streams.id"), primary_key=True)
+    game_id = Column(ForeignKey("games.id"), primary_key=True)
+
+    position = Column(Integer, nullable=False)
+
+    stream = relationship("Stream", back_populates="stream_games")
+    game = relationship("Game")
 
 
 class GameStats(Base):
@@ -96,7 +105,7 @@ class GameMeta(Base):
     steam_url = Column(String, nullable=True)
     clips_url = Column(String, nullable=True)
 
-    game = relationship("Game")
+    game = relationship("Game", back_populates="meta")
 
 
 class Participant(Base):

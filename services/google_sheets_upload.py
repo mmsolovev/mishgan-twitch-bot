@@ -7,7 +7,7 @@ from services.sheets_header_builder import build_header
 
 def setup_sheet(sheet_name: str):
     client = get_client()
-    spreadsheet = client.open("Twitch Stats")
+    spreadsheet = client.open("Tabula Streams")
 
     try:
         sheet = spreadsheet.worksheet(sheet_name)
