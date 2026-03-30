@@ -33,7 +33,7 @@ def upload_table(
     sheet_name: str,
     headers: list,
     rows: list,
-    spreadsheet_name: str = "Twitch Stats"
+    spreadsheet_name: str = "Tabula Streams"
 ):
     """
     Универсальная загрузка таблицы
