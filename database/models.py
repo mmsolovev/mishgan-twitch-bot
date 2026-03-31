@@ -19,7 +19,11 @@ class Game(Base):
     id = Column(Integer, primary_key=True)
     name = Column(String, unique=True, index=True)
 
-    stream_games = relationship("StreamGame")
+    stream_games = relationship(
+        "StreamGame",
+        back_populates="game",
+        cascade="all, delete-orphan"
+    )
     meta = relationship("GameMeta", uselist=False, back_populates="game")
 
 
@@ -41,7 +45,6 @@ class Stream(Base):
 
     title = Column(String)
 
-    # 🔗 новое
     vod_url = Column(String, nullable=True)
     clips_url = Column(String, nullable=True)
 
@@ -50,6 +53,11 @@ class Stream(Base):
         order_by="StreamGame.position",
         cascade="all, delete-orphan",
         back_populates="stream"
+    )
+    participants = relationship(
+        "Participant",
+        secondary=stream_participants,
+        back_populates="streams"
     )
 
     games = association_proxy("stream_games", "game")
@@ -64,7 +72,7 @@ class StreamGame(Base):
     position = Column(Integer, nullable=False)
 
     stream = relationship("Stream", back_populates="stream_games")
-    game = relationship("Game")
+    game = relationship("Game", back_populates="stream_games")
 
 
 class GameStats(Base):
@@ -72,9 +80,7 @@ class GameStats(Base):
 
     game_id = Column(Integer, ForeignKey("games.id"), primary_key=True)
 
-    # 🧠 ключевая вещь
     period = Column(String, primary_key=True)
-    # например: "all", "30d", "7d"
 
     hours_streamed = Column(Float)
     avg_viewers = Column(Integer)
