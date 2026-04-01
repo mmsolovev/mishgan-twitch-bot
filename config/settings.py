@@ -10,6 +10,7 @@ TWITCH_CHANNEL = os.getenv("TWITCH_CHANNEL")
 CLIENT_ID = os.getenv("CLIENT_ID")
 CLIENT_SECRET = os.getenv("CLIENT_SECRET")
 RAWG_API_KEY = os.getenv("RAWG_API_KEY")
+GAMES_SHEET_URL = os.getenv("GAMES_SHEET_URL")
 
 BOT_PREFIX = "!"
 SIGN="MrDestructoid"
