@@ -18,7 +18,7 @@ class StreamLookupResult:
 def _doc_suffix() -> str:
     if GAMES_SHEET_URL:
         return f" | Информация о всех стримах и играх канала тут {GAMES_SHEET_URL}"
-    return " Таблица стримов: ссылка не настроена."
+    return " Таблица стримов: ссылка не настроена"
 
 
 def _format_datetime(value) -> str:
@@ -81,7 +81,7 @@ def _load_streams_for_date(target_date: datetime) -> list[StreamLookupResult]:
 
 
 def build_streams_help_message() -> str:
-    return "Написать в чат: !стримы [дата] — вывод информации по стриму за дату. Формат даты: ДД.ММ.ГГГГ." + _doc_suffix()
+    return "Написать в чат: !стримы [дата ДД.ММ.ГГГГ] — вывод информации по стриму за дату" + _doc_suffix()
 
 
 def build_stream_response(query: str) -> str:
@@ -91,11 +91,11 @@ def build_stream_response(query: str) -> str:
 
     target_date = _parse_date(query)
     if not target_date:
-        return "Не понял дату. Используй формат ДД.ММ.ГГГГ." + _doc_suffix()
+        return "Не могу распознать дату, нужный формат: ДД.ММ.ГГГГ" + _doc_suffix()
 
     matches = _load_streams_for_date(target_date)
     if not matches:
-        return f"Стримов за дату {target_date.strftime('%d.%m.%Y')} не нахожу." + _doc_suffix()
+        return f"Стримов за дату {target_date.strftime('%d.%m.%Y')} не нахожу" + _doc_suffix()
 
     parts = [
         f"Дата и время: {_format_datetime(match.date)} | Длительность: {_format_hours(match.duration)} | Игры: {_format_games(match.games)}"
