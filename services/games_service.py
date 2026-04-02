@@ -25,7 +25,7 @@ def _format_hours(value: float | None) -> str:
         return "н/д"
 
     formatted = f"{value:.1f}".rstrip("0").rstrip(".")
-    return f"{formatted}ч"
+    return f"{formatted}"
 
 
 def _format_date(value) -> str:
@@ -47,7 +47,7 @@ def _format_status(liked: bool | None, completed: bool | None) -> str | None:
 def _doc_suffix() -> str:
     if GAMES_SHEET_URL:
         return f" | Информация о всех стримах и играх канала тут {GAMES_SHEET_URL}"
-    return " Таблица игр: ссылка не настроена."
+    return " Таблица игр: ссылка не настроена"
 
 
 def _load_ranked_games() -> list[GameLookupResult]:
@@ -117,7 +117,7 @@ def _find_best_match(query: str, ranked_games: list[GameLookupResult]) -> GameLo
 
 
 def build_games_help_message() -> str:
-    return "Написать в чат: !игры [название игры] — вывод статистики со стримов по игре." + _doc_suffix()
+    return "Написать в чат: !игры [название игры] — вывод статистики со стримов по игре" + _doc_suffix()
 
 
 def build_game_response(query: str) -> str:
@@ -132,10 +132,10 @@ def build_game_response(query: str) -> str:
         return f"Игры «{query.strip()}» на стримах не нахожу." + _doc_suffix()
 
     parts = [
-        f"Название: {match.name}",
-        f"Сколько раз: {match.streams_count}",
-        f"Когда последний раз: {_format_date(match.last_stream)}",
-        f"Часов: {_format_hours(match.hours_streamed)} (#{match.rank})",
+        f"Игра: {match.name}",
+        f"Количество стримов {match.streams_count}",
+        f"В последний раз {_format_date(match.last_stream)}",
+        f"Часов {_format_hours(match.hours_streamed)} (#{match.rank})",
     ]
 
     status = _format_status(match.liked, match.completed)
