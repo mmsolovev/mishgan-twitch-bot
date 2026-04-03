@@ -99,6 +99,15 @@ def _format_streams_sheet(sheet, row_count):
         "verticalAlignment": "MIDDLE",
     })
 
+    sheet.format(f"B{start_row}:B{end_row}", {
+        "numberFormat": {
+            "type": "NUMBER",
+            "pattern": "0.0",
+        },
+        "horizontalAlignment": "CENTER",
+        "verticalAlignment": "MIDDLE",
+    })
+
     sheet.format(f"F{start_row}:J{end_row}", {
         "horizontalAlignment": "LEFT",
     })
