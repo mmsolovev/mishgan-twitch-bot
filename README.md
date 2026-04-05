@@ -1,126 +1,112 @@
 # mishgan-twitch-bot
 
-Личный Twitch-бот для канала `mishgan_sol`.
+Twitch-бот для стримерского чата, локальной автоматизации и сбора статистики по стримам.
 
-Проект объединяет несколько задач:
-- чат-бот на `TwitchIO` с командами для стрима;
-- локальные сервисы для таймеров, GPT-ответов, праздников и справочной информации;
-- сбор и обработку статистики стримов из сохраненных HTML-страниц;
-- импорт данных в SQLite и выгрузку в Google Sheets.
+Проект совмещает три части:
+- чат-бота на `TwitchIO` с командами для зрителей и модераторов;
+- локальный пайплайн сбора и хранения статистики по стримам и играм;
+- табличный UI в `Google Sheets`, где удобно смотреть, дополнять и править данные.
 
-## Что умеет бот
+## Что умеет
 
-Сейчас в проекте есть команды и сервисы для:
-- GPT-запросов;
-- howlongtobeat-поиска по играм;
-- праздников;
-- таймеров и напоминаний;
-- справочной информации по локальным данным;
-- административного включения и выключения бота;
-- автоматического shoutout при рейдах.
+- отвечает на чат-команды `!команды`, `!праздник`, `!hltb`, `!инфо`, `!игры`, `!стримы`;
+- поддерживает модераторские команды `!таймер`, `!отбой`, `!старт`;
+- умеет отвечать через GPT для разрешённых пользователей;
+- автоматически делает `shoutout` при рейде от 50 зрителей;
+- хранит статистику стримов и игр в `SQLite`;
+- синхронизирует данные в `Google Sheets`, где таблица используется как UI для просмотра и ручных пометок.
+
+## Команды чата
+
+Подробная инструкция для зрителей и модераторов лежит в [CHAT_COMMANDS.txt](/C:/Users/mmsolovev/PycharmProjects/mishgan-twitch-bot/CHAT_COMMANDS.txt).
+
+Кратко:
+- `!команды` или `!команды <имя>`: список команд или справка по конкретной команде;
+- `!праздник`: случайный праздник, список на сегодня, поиск по дате или названию;
+- `!hltb <игра>`: примерное время прохождения игры;
+- `!инфо <тема>`: локальная справка по стримеру, компьютеру и девайсам;
+- `!игры <название>`: статистика по игре и ссылка на общую таблицу;
+- `!стримы <дата>`: информация о стриме за дату и ссылка на общую таблицу;
+- `!таймер ...`, `!gpt ...`, `!отбой`, `!старт`: команды с ограничением по роли.
+
+## Google Sheets как UI
+
+Проект не просто выгружает данные в таблицу, а использует `Google Sheets` как рабочий интерфейс:
+- лист `Стримы` показывает дату, длительность, тайтл, цепочку игр, ссылки и участников;
+- лист `Игры` показывает рейтинг игр, количество стримов, часы, HLTB и ручные статусы;
+- часть колонок заполняется вручную и сохраняется при безопасной синхронизации;
+- ссылка на таблицу для чата передаётся через переменную окружения `GAMES_SHEET_URL`.
+
+Для синхронизации нужен service account файл [config/credentials.json](/C:/Users/mmsolovev/PycharmProjects/mishgan-twitch-bot/config/credentials.json). В репозитории есть шаблон [config/credentials.example.json](/C:/Users/mmsolovev/PycharmProjects/mishgan-twitch-bot/config/credentials.example.json).
 
 ## Структура проекта
 
-- [bot.py](./bot.py) - минимальная точка входа.
-- [core](./core) - основной класс бота и регистрация команд.
-- [commands](./commands) - чат-команды Twitch.
-- [services](./services) - прикладная логика, API-клиенты и интеграции.
-- [collector](./collector) - парсинг локально сохраненных страниц и подготовка данных.
-- [database](./database) - SQLite-модели и работа с БД.
-- [storage](./storage) - локальные данные, кэш и runtime-артефакты.
-- [config](./config) - настройки проекта и локальные внешние credentials.
-
-## Файлы и данные
-
-В репозитории хранятся только шаблоны и безопасные примеры.
-
-Локально создаются и не коммитятся:
-- `.env`;
-- `config/credentials.json`;
-- `storage/info.json`;
-- кэш в `storage/cache/*.json`;
-- локальные runtime-конфиги в `storage/config/*.json`;
-- дампы и рабочие данные в `storage/*.json`, `storage/*.db`, `storage/pages/`.
-
-Для ориентира в репозитории оставлены:
-- [.env.example](./.env.example);
-- [config/credentials.example.json](./config/credentials.example.json);
-- [storage/info.example.json](./storage/info.example.json);
-- примеры файлов в [storage/cache](./storage/cache), [storage/config](./storage/config) и [storage/censorship](./storage/censorship).
+- [bot.py](/C:/Users/mmsolovev/PycharmProjects/mishgan-twitch-bot/bot.py) — точка входа.
+- [core](/C:/Users/mmsolovev/PycharmProjects/mishgan-twitch-bot/core) — инициализация бота и загрузка команд.
+- [commands](/C:/Users/mmsolovev/PycharmProjects/mishgan-twitch-bot/commands) — обработчики чат-команд.
+- [services](/C:/Users/mmsolovev/PycharmProjects/mishgan-twitch-bot/services) — бизнес-логика, GPT, HLTB, Sheets и прочие интеграции.
+- [database](/C:/Users/mmsolovev/PycharmProjects/mishgan-twitch-bot/database) — модели и работа с `SQLite`.
+- [collector](/C:/Users/mmsolovev/PycharmProjects/mishgan-twitch-bot/collector) — сбор и подготовка данных для импорта.
+- [storage](/C:/Users/mmsolovev/PycharmProjects/mishgan-twitch-bot/storage) — локальные данные, кэш, база и runtime-файлы.
+- [config](/C:/Users/mmsolovev/PycharmProjects/mishgan-twitch-bot/config) — конфигурация и credentials.
 
 ## Конфигурация
 
-Для локальной работы проект ожидает несколько файлов и переменных окружения:
-- `.env` для Twitch API, OpenRouter, RAWG и других внешних ключей;
-- `config/credentials.json` для Google Sheets service account;
-- `storage/info.json` для локальной справочной информации, которую использует команда `!инфо`.
+Основные настройки лежат в `.env`:
+- `TWITCH_TOKEN`, `TWITCH_NICK`, `TWITCH_CHANNEL` для подключения к Twitch;
+- `CLIENT_ID`, `CLIENT_SECRET` для Twitch API;
+- `RAWG_API_KEY` для игровых интеграций;
+- `GAMES_SHEET_URL` для публичной ссылки на таблицу в ответах `!игры` и `!стримы`.
 
-В репозитории для этого оставлены шаблоны и примеры:
-- [.env.example](./.env.example);
-- [config/credentials.example.json](./config/credentials.example.json);
-- [storage/info.example.json](./storage/info.example.json).
+Примеры:
+- [.env.example](/C:/Users/mmsolovev/PycharmProjects/mishgan-twitch-bot/.env.example)
+- [storage/info.example.json](/C:/Users/mmsolovev/PycharmProjects/mishgan-twitch-bot/storage/info.example.json)
 
-Некоторые интеграции можно считать опциональными:
-- без Google credentials не будет работать выгрузка в Google Sheets;
-- без локального `storage/info.json` сервис `info` использует пример из репозитория;
-- без части API-ключей будут недоступны только связанные команды, а не весь проект целиком.
+Локально также используются:
+- `storage/info.json` — база ответов для `!инфо`;
+- `storage/info_aliases.json` — алиасы и варианты запросов;
+- файлы в `storage/cache`, `storage/config`, `storage/pages`;
+- `storage/*.db` и `storage/*.json` с рабочими данными.
 
-## Команды бота
+## Запуск
 
-Основные команды проекта сейчас такие:
-- `!команды` - показать список доступных команд или описание конкретной команды;
-- `!gpt` - короткий ответ от GPT для модераторов и админов;
-- `!праздник` - случайный праздник, поиск по дате или по названию;
-- `!hltb` - примерное время прохождения игры;
-- `!таймер` - пользовательские таймеры и напоминания;
-- `!инфо` - ответы из локальной базы фактов о стримере, сетапе и девайсах;
-- `!отбой` и `!старт` - выключение и включение бота через чат.
+Локально:
 
-## Данные
+```bash
+python -m venv .venv
+.venv\Scripts\activate
+pip install -r requirements.txt
+python bot.py
+```
 
-В проекте есть несколько разных типов данных:
-- runtime-данные и кэш в `storage/cache`, `storage/config`, `storage/*.db`;
-- локальные справочные и рабочие JSON-файлы в `storage`;
-- сохраненные HTML-страницы в `storage/pages` для парсеров;
-- шаблоны и безопасные примеры, которые можно хранить в репозитории.
+Через Docker:
 
-Текущий поток данных выглядит так:
-- HTML-страницы из TwitchTracker сохраняются локально;
-- парсеры и коллекторы превращают их в JSON;
-- данные можно импортировать в SQLite;
-- часть результатов можно выгружать в Google Sheets.
+```bash
+docker compose up -d --build
+```
 
-В Git стоит хранить только:
-- код;
-- документацию;
-- `.example`-файлы;
-- безопасные статические вспомогательные данные, если они нужны проекту.
+Перед запуском нужно подготовить:
+- `.env` на основе [.env.example](/C:/Users/mmsolovev/PycharmProjects/mishgan-twitch-bot/.env.example);
+- при необходимости `config/credentials.json`;
+- при необходимости локальные данные в `storage`.
 
-## Быстрый деплой
+## Данные и ограничения
 
-Для переноса на другую машину через Docker сейчас достаточно подготовить:
-- актуальный `.env` на основе [.env.example](./.env.example);
-- при необходимости локальный `storage/info.json`;
-- при желании уже существующий `storage`, если нужно перенести кэш, базу и рабочие данные.
+- Бот подключается к каналу, указанному в `TWITCH_CHANNEL`, а не к одному жёстко зашитому каналу.
+- Некоторые команды доступны только модераторам или списку разрешённых пользователей.
+- Без `Google Sheets` интеграции бот продолжит работать, но ответы `!игры` и `!стримы` будут без полезной ссылки на таблицу.
+- Без `storage/info.json` команда `!инфо` использует пример из репозитория.
 
-В репозитории для контейнерного запуска есть:
-- [Dockerfile](./Dockerfile);
-- [docker-compose.yml](./docker-compose.yml);
-- [.dockerignore](./.dockerignore).
+## Зависимости
 
-Базовый сценарий деплоя такой:
-- склонировать репозиторий на новую машину;
-- заполнить `.env`;
-- при необходимости перенести локальные файлы из `storage`;
-- выполнить `docker compose up -d --build`.
+Основные библиотеки:
+- `twitchio`
+- `SQLAlchemy`
+- `gspread`
+- `oauth2client`
+- `howlongtobeatpy`
+- `openai`
+- `g4f`
+- `beautifulsoup4`
 
-Текущее решение предполагает:
-- код и безопасные примеры попадают в образ;
-- реальные секреты и рабочие данные остаются снаружи контейнера;
-- `storage` монтируется как volume, чтобы данные не терялись между перезапусками.
-- интеграции вроде Google Sheets остаются опциональными и не требуются для базового запуска контейнера.
-
-## Состояние проекта
-
-Проект ориентирован на личное использование и активно дорабатывается.
-Сейчас основной акцент сделан на рабочих сценариях стрима и локальной автоматизации, а не на универсальной упаковке или полной документации.
+Список пакетов: [requirements.txt](/C:/Users/mmsolovev/PycharmProjects/mishgan-twitch-bot/requirements.txt).
