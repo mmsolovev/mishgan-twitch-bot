@@ -3,6 +3,9 @@ from database.models import Game, GameStats, Stream
 from services.google_sheets_service import upload_table, format_dt, get_client
 from services.sheets_header_builder import build_header
 
+STREAMS_SHEET_NAME = "СТРИМЫ"
+GAMES_SHEET_NAME = "ИГРЫ"
+
 
 
 def setup_sheet(sheet_name: str):
@@ -42,7 +45,7 @@ def upload_games():
     session.close()
 
     upload_table(
-        sheet_name="Games",
+        sheet_name=GAMES_SHEET_NAME,
         headers=[
             "Rank", "Game", "Hours",
             "Avg viewers", "Max viewers",
@@ -75,7 +78,7 @@ def upload_streams():
     session.close()
 
     upload_table(
-        sheet_name="Streams",
+        sheet_name=STREAMS_SHEET_NAME,
         headers=[
             "Date", "Duration", "Avg viewers",
             "Max viewers", "Followers", "Views",

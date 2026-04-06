@@ -1,44 +1,53 @@
-import asyncio
-import random
-import time
-
 import services.runtime as runtime
 
 from twitchio.ext import commands
+
+from core.context import SafeContext
 from core.registry import load_commands
-from config.settings import BOT_PREFIX, TWITCH_TOKEN, TWITCH_NICK, TWITCH_CHANNEL
+from config.settings import BOT_PREFIX, TWITCH_CHANNEL, TWITCH_NICK, TWITCH_TOKEN
+from services.eventsub_service import EventSubService
 
 
 class Bot(commands.Bot):
-
     def __init__(self):
         super().__init__(
             token=TWITCH_TOKEN,
             prefix=BOT_PREFIX,
             nick=TWITCH_NICK,
             initial_channels=[TWITCH_CHANNEL],
+            case_insensitive=True,
         )
 
-        self.last_shoutout = 0
-        self.recent_raids = set()
+        self.commands_loaded = False
+        self.eventsub_service = EventSubService(self)
 
     async def event_ready(self):
-        load_commands(self)
+        if not self.commands_loaded:
+            load_commands(self)
+            self.commands_loaded = True
 
-        print(f"✅ Bot connected as {self.nick} to {TWITCH_CHANNEL}")
-        print(f"📜 Commands loaded: {list(self.commands.keys())}")
+        if not self.eventsub_service.connected:
+            try:
+                await self.eventsub_service.setup()
+            except Exception as exc:
+                print(f"[EventSub] setup failed: {exc}")
+
+        print(f"Bot connected as {self.nick} to {TWITCH_CHANNEL}")
+        print(f"Commands loaded: {list(self.commands.keys())}")
+        print(f"[EventSub] subscriptions: {self.eventsub_service.subscriptions}")
+
+    async def get_context(self, message, *, cls=None):
+        return await super().get_context(message, cls=cls or SafeContext)
 
     async def event_message(self, message):
         if not message.author:
             return
 
-        # лог команд
         if message.content.startswith(self._prefix):
             print(f"[CMD] {message.author.name}: {message.content}")
 
-        # ❗ если бот выключен — игнорируем ВСЁ кроме !старт
         if not runtime.BOT_ENABLED:
-            if not message.content.startswith(f"{self._prefix}старт"):
+            if not message.content.casefold().startswith(f"{self._prefix}старт".casefold()):
                 return
 
         await self.handle_commands(message)
@@ -50,40 +59,22 @@ class Bot(commands.Bot):
         raider = tags.get("msg-param-login")
         viewers = int(tags.get("msg-param-viewerCount", 0))
 
-        print(f"[RAID] {raider} with {viewers} viewers")
+        print(f"[RAID][IRC] {raider} with {viewers} viewers")
 
-        # фильтр
-        if not raider or viewers < 50:
-            return
+    async def event_eventsub_notification_channel_update(self, payload):
+        await self.eventsub_service.dispatch("channel_update", payload)
 
-        # защита от дублей
-        if raider in self.recent_raids:
-            return
+    async def event_eventsub_notification_stream_start(self, payload):
+        await self.eventsub_service.dispatch("stream_start", payload)
 
-        self.recent_raids.add(raider)
+    async def event_eventsub_notification_stream_end(self, payload):
+        await self.eventsub_service.dispatch("stream_end", payload)
 
-        # защита от себя
-        if raider.lower() == TWITCH_CHANNEL.lower():
-            return
+    async def event_eventsub_notification_raid(self, payload):
+        await self.eventsub_service.dispatch("raid", payload)
 
-        await self.handle_raid(raider)
+    async def event_eventsub_notification_channel_shoutout_create(self, payload):
+        await self.eventsub_service.dispatch("channel_shoutout_create", payload)
 
-    async def handle_raid(self, raider: str):
-        now = time.time()
-
-        if now - self.last_shoutout < 120:
-            print("[SO] cooldown active")
-            return
-
-        delay = random.uniform(2.5, 5.5)
-        await asyncio.sleep(delay)
-
-        channel = self.get_channel(TWITCH_CHANNEL)
-        if not channel:
-            return
-
-        print(f"[SO] sending shoutout to {raider} after {delay:.2f}s")
-
-        await channel.send(f"/shoutout {raider}")
-
-        self.last_shoutout = time.time()
+    async def event_eventsub_notification_channel_shoutout_receive(self, payload):
+        await self.eventsub_service.dispatch("channel_shoutout_receive", payload)
