@@ -4,10 +4,8 @@ from services.google_sheets_service import format_dt, get_client
 
 
 SPREADSHEET_NAME = "Tabula Streams"
-
-
-def _sheet_datetime_formula(dt):
-    return f"=DATE({dt.year},{dt.month},{dt.day})+TIME({dt.hour},{dt.minute},{dt.second})"
+STREAMS_SHEET_NAME = "СТРИМЫ"
+GAMES_SHEET_NAME = "ИГРЫ"
 
 
 def _stream_display_date(stream):
@@ -284,7 +282,7 @@ def _game_comparable_row(row):
 
 def sync_streams():
     client = get_client()
-    sheet = client.open(SPREADSHEET_NAME).worksheet("Стримы")
+    sheet = client.open(SPREADSHEET_NAME).worksheet(STREAMS_SHEET_NAME)
 
     session = SessionLocal()
     streams = session.query(Stream).order_by(Stream.date.desc()).all()
@@ -300,7 +298,7 @@ def sync_streams():
 
 def sync_games():
     client = get_client()
-    sheet = client.open(SPREADSHEET_NAME).worksheet("Игры")
+    sheet = client.open(SPREADSHEET_NAME).worksheet(GAMES_SHEET_NAME)
 
     session = SessionLocal()
     rows = []
@@ -319,7 +317,7 @@ def sync_games():
 
 def sync_streams_safe():
     client = get_client()
-    sheet = client.open(SPREADSHEET_NAME).worksheet("Стримы")
+    sheet = client.open(SPREADSHEET_NAME).worksheet(STREAMS_SHEET_NAME)
 
     session = SessionLocal()
 
@@ -367,7 +365,7 @@ def sync_streams_safe():
 
 def sync_games_safe():
     client = get_client()
-    sheet = client.open(SPREADSHEET_NAME).worksheet("Игры")
+    sheet = client.open(SPREADSHEET_NAME).worksheet(GAMES_SHEET_NAME)
 
     session = SessionLocal()
 

@@ -232,3 +232,4 @@ __marimo__/
 !/storage/censorship/*.example.json
 
 /storage/info.json
+/storage/censorship/twitch_rules.txt

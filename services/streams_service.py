@@ -1,3 +1,4 @@
+import re
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 
@@ -44,7 +45,28 @@ def _parse_date(value: str) -> datetime | None:
     if not raw_value:
         return None
 
-    for pattern in ("%d.%m.%Y", "%Y-%m-%d", "%d/%m/%Y"):
+    normalized_value = re.sub(r"[./-]", ".", raw_value)
+
+    day_first_patterns = (
+        "%d.%m.%Y",
+        "%d.%m.%y",
+    )
+    year_first_patterns = (
+        "%Y-%m-%d",
+        "%Y/%m/%d",
+        "%Y.%m.%d",
+        "%y-%m-%d",
+        "%y/%m/%d",
+        "%y.%m.%d",
+    )
+
+    for pattern in day_first_patterns:
+        try:
+            return datetime.strptime(normalized_value, pattern)
+        except ValueError:
+            continue
+
+    for pattern in year_first_patterns:
         try:
             return datetime.strptime(raw_value, pattern)
         except ValueError:
@@ -81,7 +103,11 @@ def _load_streams_for_date(target_date: datetime) -> list[StreamLookupResult]:
 
 
 def build_streams_help_message() -> str:
-    return "Написать в чат: !стримы [дата ДД.ММ.ГГГГ] — вывод информации по стриму за дату" + _doc_suffix()
+    return (
+        "Написать в чат: !стримы [дата] — вывод информации по стриму за дату. "
+        "Поддерживаются форматы вроде 05.04.2026, 05.04.26, 05/04/2026, 05-04-26, 2026-04-05"
+        + _doc_suffix()
+    )
 
 
 def build_stream_response(query: str) -> str:
@@ -91,7 +117,10 @@ def build_stream_response(query: str) -> str:
 
     target_date = _parse_date(query)
     if not target_date:
-        return "Не могу распознать дату, нужный формат: ДД.ММ.ГГГГ" + _doc_suffix()
+        return (
+            "Не могу распознать дату. Подойдут форматы вроде 05.04.2026, 05.04.26, 05/04/2026, 05-04-26 или 2026-04-05"
+            + _doc_suffix()
+        )
 
     matches = _load_streams_for_date(target_date)
     if not matches:
