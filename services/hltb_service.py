@@ -71,39 +71,55 @@ def _search_hltb(game: str):
     return best_match
 
 
+async def get_hltb_summary(game: str | None) -> str | None:
+    if not game:
+        return None
+
+    cache = load_cache(CACHE_KEY)
+    game_key = _normalize_game_key(game)
+    cached_message, stale_message = _get_cached_message(cache, game_key)
+
+    message = cached_message or stale_message
+    if message:
+        if "Нет данных" in message or "Не удалось получить данные" in message:
+            return None
+        return message.removeprefix("MrDestructoid ").strip()
+
+    try:
+        best = await asyncio.to_thread(_search_hltb, game)
+    except Exception:
+        return None
+
+    if not best:
+        return None
+
+    summary = (
+        f"Прохождение {best.game_name} | "
+        f"Сюжет: {best.main_story or '?'} ч | "
+        f"Доп: {best.main_extra or '?'} ч | "
+        f"100%: {best.completionist or '?'} ч"
+    )
+
+    _save_cached_message(cache, game_key, f"MrDestructoid {summary}")
+    save_cache(CACHE_KEY, cache)
+
+    return summary
+
+
 async def get_hltb_info(game: str | None) -> str:
     if not game:
         game = await get_current_game()
         if not game:
             return "MrDestructoid Не удалось определить текущую игру стрима."
 
+    summary = await get_hltb_summary(game)
+    if summary:
+        return f"MrDestructoid {summary}"
+
     cache = load_cache(CACHE_KEY)
     game_key = _normalize_game_key(game)
-    cached_message, stale_message = _get_cached_message(cache, game_key)
+    _, stale_message = _get_cached_message(cache, game_key)
+    if stale_message:
+        return stale_message
 
-    if cached_message:
-        return cached_message
-
-    try:
-        best = await asyncio.to_thread(_search_hltb, game)
-    except Exception:
-        if stale_message:
-            return stale_message
-        return f"MrDestructoid Не удалось получить данные для «{game}»"
-
-    if not best:
-        if stale_message:
-            return stale_message
-        return f"MrDestructoid Нет данных для «{game}»"
-
-    message = (
-        f"MrDestructoid Прохождение {best.game_name} | "
-        f"Сюжет: {best.main_story or '?'} ч | "
-        f"Доп: {best.main_extra or '?'} ч | "
-        f"100%: {best.completionist or '?'} ч"
-    )
-
-    _save_cached_message(cache, game_key, message)
-    save_cache(CACHE_KEY, cache)
-
-    return message
+    return f"MrDestructoid Нет данных для «{game}»"
