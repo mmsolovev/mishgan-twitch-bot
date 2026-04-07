@@ -1,11 +1,18 @@
+from datetime import datetime
+
 from database.db import SessionLocal
-from database.models import Game, GameMeta, GameStats, Stream
+from database.models import Game, GameMeta, GameStats, RecommendedGame, Stream
+from config.settings import RECOMMENDATIONS_STREAMER_LOGIN
 from services.google_sheets_service import format_dt, get_client
+from services.recommendations_service import STATUS_RELEASED, STATUS_UPCOMING, refresh_recommendation_lifecycle
 
 
 SPREADSHEET_NAME = "Tabula Streams"
 STREAMS_SHEET_NAME = "СТРИМЫ"
 GAMES_SHEET_NAME = "ИГРЫ"
+
+RELEASES_SHEET_NAME = "РЕЛИЗЫ"
+RECOMMENDATIONS_SHEET_NAME = "СОВЕТЫ"
 
 
 def _stream_display_date(stream):
@@ -38,6 +45,14 @@ def _normalize_row(row, width):
     return row[:width] + [""] * max(0, width - len(row))
 
 
+def _get_or_create_worksheet(client, sheet_name, rows="1000", cols="20"):
+    spreadsheet = client.open(SPREADSHEET_NAME)
+    try:
+        return spreadsheet.worksheet(sheet_name)
+    except Exception:
+        return spreadsheet.add_worksheet(title=sheet_name, rows=rows, cols=cols)
+
+
 def _parse_sheet_bool(value):
     normalized = str(value).strip().upper()
     if normalized in {"TRUE", "ИСТИНА"}:
@@ -45,6 +60,16 @@ def _parse_sheet_bool(value):
     if normalized in {"FALSE", "ЛОЖЬ"}:
         return False
     return None
+
+
+def _build_hyperlink_formula(url, label="Steam"):
+    normalized_url = str(url or "").strip()
+    if not normalized_url:
+        return ""
+
+    normalized_url = normalized_url.replace('"', "%22")
+    safe_label = str(label).replace('"', "")
+    return f'=HYPERLINK("{normalized_url}"; "{safe_label}")'
 
 
 def _format_streams_sheet(sheet, row_count):
@@ -154,6 +179,136 @@ def _format_games_sheet(sheet, row_count):
     sheet.spreadsheet.batch_update({"requests": requests})
 
 
+def _format_releases_sheet(sheet, row_count):
+    if row_count <= 0:
+        return
+
+    start_row = 9
+    end_row = start_row + row_count - 1
+
+    requests = [{
+        "unmergeCells": {
+            "range": {
+                "sheetId": sheet.id,
+                "startRowIndex": start_row - 1,
+                "endRowIndex": end_row,
+                "startColumnIndex": 6,
+                "endColumnIndex": 10,
+            }
+        }
+    }]
+
+    for row in range(start_row, end_row + 1):
+        requests.append({
+            "mergeCells": {
+                "range": {
+                    "sheetId": sheet.id,
+                    "startRowIndex": row - 1,
+                    "endRowIndex": row,
+                    "startColumnIndex": 6,
+                    "endColumnIndex": 10,
+                },
+                "mergeType": "MERGE_ALL",
+            }
+        })
+        requests.append({
+            "setDataValidation": {
+                "range": {
+                    "sheetId": sheet.id,
+                    "startRowIndex": row - 1,
+                    "endRowIndex": row,
+                    "startColumnIndex": 5,
+                    "endColumnIndex": 6,
+                },
+                "rule": {
+                    "condition": {"type": "BOOLEAN"},
+                    "showCustomUi": True,
+                    "strict": True,
+                },
+            }
+        })
+
+    sheet.spreadsheet.batch_update({"requests": requests})
+
+    sheet.format(f"A{start_row}:L{end_row}", {
+        "wrapStrategy": "WRAP",
+        "verticalAlignment": "MIDDLE",
+        "textFormat": {
+            "fontFamily": "Montserrat",
+            "fontSize": 14,
+            "foregroundColor": {"red": 229 / 255, "green": 231 / 255, "blue": 235 / 255},
+        },
+    })
+
+    sheet.format(f"A{start_row}:B{end_row}", {
+        "horizontalAlignment": "CENTER",
+        "verticalAlignment": "MIDDLE",
+    })
+
+    sheet.format(f"E{start_row}:E{end_row}", {
+        "textFormat": {
+            "fontFamily": "Orbitron",
+            "fontSize": 14,
+            "foregroundColor": {"red": 102 / 255, "green": 192 / 255, "blue": 244 / 255},
+        },
+        "horizontalAlignment": "CENTER",
+        "verticalAlignment": "MIDDLE",
+    })
+
+    sheet.format(f"F{start_row}:F{end_row}", {
+        "horizontalAlignment": "CENTER",
+        "verticalAlignment": "MIDDLE",
+    })
+
+    sheet.format(f"G{start_row}:J{end_row}", {
+        "horizontalAlignment": "CENTER",
+        "verticalAlignment": "MIDDLE",
+    })
+
+
+def _format_recommendations_sheet(sheet, row_count):
+    if row_count <= 0:
+        return
+
+    start_row = 9
+    end_row = start_row + row_count - 1
+
+    sheet.format(f"A{start_row}:I{end_row}", {
+        "wrapStrategy": "WRAP",
+        "verticalAlignment": "MIDDLE",
+        "textFormat": {
+            "fontFamily": "Montserrat",
+            "fontSize": 14,
+            "foregroundColor": {"red": 229 / 255, "green": 231 / 255, "blue": 235 / 255},
+        },
+    })
+
+    sheet.format(f"A{start_row}:B{end_row}", {
+        "horizontalAlignment": "CENTER",
+        "verticalAlignment": "MIDDLE",
+    })
+
+    sheet.format(f"B{start_row}:B{end_row}", {
+        "numberFormat": {
+            "type": "NUMBER",
+            "pattern": "0",
+        },
+        "horizontalAlignment": "CENTER",
+        "verticalAlignment": "MIDDLE",
+    })
+
+    sheet.format(f"D{start_row}:D{end_row}", {
+        "textFormat": {
+            "fontFamily": "Orbitron",
+            "fontSize": 14,
+            "foregroundColor": {"red": 102 / 255, "green": 192 / 255, "blue": 244 / 255},
+        },
+        "horizontalAlignment": "CENTER",
+        "verticalAlignment": "MIDDLE",
+    })
+
+
+
 def _stream_comparable_row(row):
     normalized_row = _normalize_row(row, 12)
     return [str(value) for value in normalized_row]
@@ -235,7 +390,7 @@ def _build_games_dataset(session):
 
 def _build_game_row(game, stats, rank, manual_columns=None):
     meta = _get_or_create_game_meta(game)
-    steam = f'=HYPERLINK("{meta.steam_url}"; "Steam")' if meta.steam_url else ""
+    steam = f'=ГИПЕРССЫЛКА("{meta.steam_url}"; "Steam")' if meta.steam_url else ""
 
     row = [
         format_dt(stats.last_stream) if stats.last_stream else "",
@@ -278,6 +433,111 @@ def _game_comparable_row(row):
         else:
             comparable.append(str(value))
     return comparable
+
+
+def _format_release_value(recommendation):
+    if not recommendation.release_date:
+        return ""
+    return recommendation.release_date.strftime("%d.%m.%Y\n%H:%M")
+
+
+def _format_release_delta(recommendation):
+    if not recommendation.release_date:
+        return ""
+
+    today = datetime.utcnow().date()
+    release_day = recommendation.release_date.date()
+    days = (release_day - today).days
+
+    if days < 0:
+        return ""
+    if days == 0:
+        return "сегодня"
+    return f"{days} д."
+
+
+def _build_tags_text(recommendation):
+    parts = [recommendation.platforms_text, recommendation.genres_text]
+    parts = [part for part in parts if part]
+    return " | ".join(parts)
+
+
+def _build_recommenders_text(recommendation):
+    return ", ".join(
+        vote.user_display_name
+        for vote in recommendation.votes
+        if vote.user_login != RECOMMENDATIONS_STREAMER_LOGIN.casefold()
+    )
+
+
+def _format_rating_value(recommendation):
+    value = (recommendation.rating_text or "").strip()
+    if not value:
+        return ""
+
+    return value.split("|", 1)[0].strip()
+
+
+def _sync_release_manual_fields_from_sheet(session, existing_rows):
+    for recommendation_name, row in existing_rows.items():
+        recommendation = session.query(RecommendedGame).filter_by(title=recommendation_name).first()
+        if not recommendation:
+            continue
+
+        normalized_row = _normalize_row(row, 12)
+        sheet_value = _parse_sheet_bool(normalized_row[5])
+        if sheet_value is True:
+            recommendation.streamer_interested = True
+        elif sheet_value is False and recommendation.streamer_interested is False:
+            recommendation.streamer_interested = False
+
+    session.flush()
+
+
+def _release_comparable_row(row):
+    normalized_row = _normalize_row(row, 12)
+    comparable = []
+    for value in normalized_row:
+        if value is True:
+            comparable.append("TRUE")
+        elif value is False:
+            comparable.append("FALSE")
+        else:
+            comparable.append(str(value))
+    return comparable
+
+
+def _build_release_row(recommendation):
+    steam = _build_hyperlink_formula(recommendation.steam_url)
+    return [
+        _format_release_value(recommendation),
+        _format_release_delta(recommendation),
+        recommendation.title,
+        recommendation.description_short or "",
+        steam,
+        bool(recommendation.streamer_interested),
+        "",
+        "",
+        "",
+        "",
+        _build_tags_text(recommendation),
+        _build_recommenders_text(recommendation),
+    ]
+
+
+def _build_recommendation_row(recommendation):
+    steam = _build_hyperlink_formula(recommendation.steam_url)
+    return [
+        recommendation.release_date.strftime("%d.%m.%Y") if recommendation.release_date else "",
+        len(recommendation.votes),
+        recommendation.title,
+        steam,
+        _format_rating_value(recommendation),
+        _build_tags_text(recommendation),
+        "",
+        "",
+        _build_recommenders_text(recommendation),
+    ]
 
 
 def sync_streams():
@@ -404,4 +664,72 @@ def sync_games_safe():
 
     session.commit()
 
+    session.close()
+
+
+def sync_releases_safe():
+    refresh_recommendation_lifecycle()
+
+    client = get_client()
+    sheet = _get_or_create_worksheet(client, RELEASES_SHEET_NAME)
+
+    session = SessionLocal()
+    values = sheet.get_all_values()
+    data_rows = values[8:] if len(values) > 8 else []
+
+    existing = {}
+    for row in data_rows:
+        normalized_row = _normalize_row(row, 12)
+        title = normalized_row[2]
+        if title:
+            existing[title] = normalized_row
+
+    _sync_release_manual_fields_from_sheet(session, existing)
+
+    recommendations = (
+        session.query(RecommendedGame)
+        .filter(RecommendedGame.status == STATUS_UPCOMING)
+        .order_by(RecommendedGame.release_date.asc(), RecommendedGame.title.asc())
+        .all()
+    )
+    rows = []
+    for offset, recommendation in enumerate(recommendations, start=9):
+        row = _build_release_row(recommendation)
+        row[6] = f'=IF(F{offset}=TRUE;"👍";"")'
+        rows.append(row)
+
+    current_rows = [_release_comparable_row(row) for row in data_rows]
+    comparable_final_rows = [_release_comparable_row(row) for row in rows]
+
+    if current_rows != comparable_final_rows:
+        sheet.batch_clear(["A9:L1000"])
+        if rows:
+            sheet.update("A9", rows, value_input_option="USER_ENTERED")
+            _format_releases_sheet(sheet, len(rows))
+
+    print(f"Releases synced: {len(rows)}")
+    session.commit()
+    session.close()
+
+
+def sync_recommendations_safe():
+    refresh_recommendation_lifecycle()
+
+    client = get_client()
+    sheet = _get_or_create_worksheet(client, RECOMMENDATIONS_SHEET_NAME)
+
+    session = SessionLocal()
+    recommendations = (
+        session.query(RecommendedGame)
+        .filter(RecommendedGame.status == STATUS_RELEASED)
+        .order_by(RecommendedGame.release_date.asc(), RecommendedGame.title.asc())
+        .all()
+    )
+    rows = [_build_recommendation_row(recommendation) for recommendation in recommendations]
+    sheet.batch_clear(["A9:I1000"])
+    if rows:
+        sheet.update("A9", rows, value_input_option="USER_ENTERED")
+        _format_recommendations_sheet(sheet, len(rows))
+
+    print(f"Recommendations synced: {len(rows)}")
     session.close()

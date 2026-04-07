@@ -1,4 +1,15 @@
-from sqlalchemy import Column, Integer, String, Float, Table, ForeignKey, DateTime, Boolean
+from sqlalchemy import (
+    Boolean,
+    Column,
+    DateTime,
+    Float,
+    ForeignKey,
+    Integer,
+    String,
+    Table,
+    Text,
+    UniqueConstraint,
+)
 from sqlalchemy.ext.associationproxy import association_proxy
 from sqlalchemy.orm import relationship
 
@@ -25,6 +36,7 @@ class Game(Base):
         cascade="all, delete-orphan"
     )
     meta = relationship("GameMeta", uselist=False, back_populates="game")
+    recommendations = relationship("RecommendedGame", back_populates="matched_game")
 
 
 class Stream(Base):
@@ -130,3 +142,59 @@ class Participant(Base):
         secondary=stream_participants,
         back_populates="participants"
     )
+
+
+class RecommendedGame(Base):
+    __tablename__ = "recommended_games"
+
+    id = Column(Integer, primary_key=True)
+
+    query_name = Column(String, nullable=False)
+    normalized_name = Column(String, nullable=False, index=True, unique=True)
+    title = Column(String, nullable=False)
+    status = Column(String, nullable=False, index=True)
+
+    release_date = Column(DateTime, nullable=True, index=True)
+    release_precision = Column(String, nullable=False, default="unknown")
+
+    description_short = Column(Text, nullable=True)
+    steam_url = Column(String, nullable=True)
+    rating_text = Column(String, nullable=True)
+    platforms_text = Column(String, nullable=True)
+    genres_text = Column(String, nullable=True)
+    cover_url = Column(String, nullable=True)
+
+    source_name = Column(String, nullable=True)
+    source_game_id = Column(String, nullable=True, index=True)
+    source_payload = Column(Text, nullable=True)
+
+    matched_game_id = Column(Integer, ForeignKey("games.id"), nullable=True, index=True)
+    streamer_interested = Column(Boolean, nullable=False, default=False)
+
+    created_at = Column(DateTime, nullable=False)
+    updated_at = Column(DateTime, nullable=False)
+    last_checked_at = Column(DateTime, nullable=True)
+
+    matched_game = relationship("Game", back_populates="recommendations")
+    votes = relationship(
+        "RecommendedGameVote",
+        back_populates="recommended_game",
+        cascade="all, delete-orphan",
+        order_by="RecommendedGameVote.created_at",
+    )
+
+
+class RecommendedGameVote(Base):
+    __tablename__ = "recommended_game_votes"
+    __table_args__ = (
+        UniqueConstraint("recommended_game_id", "user_login", name="uq_recommended_game_votes_user"),
+    )
+
+    id = Column(Integer, primary_key=True)
+    recommended_game_id = Column(ForeignKey("recommended_games.id"), nullable=False, index=True)
+
+    user_login = Column(String, nullable=False)
+    user_display_name = Column(String, nullable=False)
+    created_at = Column(DateTime, nullable=False)
+
+    recommended_game = relationship("RecommendedGame", back_populates="votes")

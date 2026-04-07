@@ -1,6 +1,7 @@
 import services.runtime as runtime
 
 from twitchio.ext import commands
+from twitchio.ext.commands.errors import CommandNotFound
 
 from core.context import SafeContext
 from core.registry import load_commands
@@ -51,6 +52,14 @@ class Bot(commands.Bot):
                 return
 
         await self.handle_commands(message)
+
+    async def event_command_error(self, context, error):
+        if isinstance(error, CommandNotFound):
+            command_name = error.name or context.message.content.removeprefix(str(context.prefix)).split(" ", 1)[0]
+            print(f"\x1b[31m[CMD] Unknown command: {command_name}\x1b[0m")
+            return
+
+        await super().event_command_error(context, error)
 
     async def event_raw_usernotice(self, channel, tags):
         if tags.get("msg-id") != "raid":

@@ -235,6 +235,30 @@ def _is_confident_match(query: str, best_match: CandidateMatch, other_matches: l
     return best_match.ratio >= 0.97
 
 
+def find_game_lookup(query: str) -> GameLookupResult | None:
+    query = (query or "").strip()
+    if not query:
+        return None
+
+    ranked_games = _load_ranked_games()
+
+    exact_match = _find_exact_match(query, ranked_games)
+    if exact_match:
+        return exact_match
+
+    similar_matches = _find_similar_matches(query, ranked_games)
+    if not similar_matches:
+        return None
+
+    best_match = similar_matches[0]
+    other_matches = similar_matches[1:]
+
+    if _is_confident_match(query, best_match, other_matches):
+        return best_match.game
+
+    return None
+
+
 def build_games_help_message() -> str:
     return "Написать в чат: !игры [название игры] — вывод статистики со стримов по игре" + _doc_suffix()
 
