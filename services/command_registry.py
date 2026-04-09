@@ -1,7 +1,8 @@
 COMMANDS_INFO = {}
+COMMAND_ALIASES = {}
 
 
-def register_command(name: str, description: str, access: str = "all"):
+def register_command(name: str, description: str, access: str = "all", aliases: list[str] | None = None):
     """
     access:
     - all
@@ -10,8 +11,12 @@ def register_command(name: str, description: str, access: str = "all"):
 
     COMMANDS_INFO[name] = {
         "description": description,
-        "access": access
+        "access": access,
+        "aliases": list(aliases or []),
     }
+
+    for alias in aliases or []:
+        COMMAND_ALIASES[alias] = name
 
 
 def get_commands():
@@ -19,4 +24,5 @@ def get_commands():
 
 
 def get_command(name: str):
-    return COMMANDS_INFO.get(name)
+    command_name = COMMAND_ALIASES.get(name, name)
+    return COMMANDS_INFO.get(command_name)

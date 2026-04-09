@@ -11,10 +11,11 @@ def setup(bot):
     register_command(
         "стримы",
         "Команда: !стримы [дата] — информация по стриму за указанную дату и ссылка на общую таблицу",
-        "all"
+        "all",
+        aliases=["стрим"],
     )
 
-    @commands.command(name="стримы")
+    @commands.command(name="стримы", aliases=("стрим",))
     async def streams_command(ctx, *, date_query: str = None):
         if not check_cooldown(ctx, "стримы", 10):
             return

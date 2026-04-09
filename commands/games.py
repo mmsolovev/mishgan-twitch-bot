@@ -11,10 +11,11 @@ def setup(bot):
     register_command(
         "игры",
         "Команда: !игры [название игры] — статистика по игре на стриме и ссылка на общую таблицу",
-        "all"
+        "all",
+        aliases=["игра"],
     )
 
-    @commands.command(name="игры")
+    @commands.command(name="игры", aliases=("игра",))
     async def games_command(ctx, *, game: str = None):
         if not check_cooldown(ctx, "игры", 10):
             return

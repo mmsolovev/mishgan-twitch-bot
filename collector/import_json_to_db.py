@@ -42,6 +42,33 @@ def unique_in_order(values):
     return result
 
 
+def choose_preferred_game_stats(current, candidate):
+    current_last_stream = parse_last_stream(current["last_stream"])
+    candidate_last_stream = parse_last_stream(candidate["last_stream"])
+
+    if candidate_last_stream != current_last_stream:
+        return candidate if candidate_last_stream > current_last_stream else current
+
+    if candidate["hours_streamed"] != current["hours_streamed"]:
+        return candidate if candidate["hours_streamed"] > current["hours_streamed"] else current
+
+    return candidate if candidate["rank"] < current["rank"] else current
+
+
+def deduplicate_games_stats(games):
+    games_by_name = {}
+
+    for game in games:
+        existing = games_by_name.get(game["game"])
+        if existing is None:
+            games_by_name[game["game"]] = game
+            continue
+
+        games_by_name[game["game"]] = choose_preferred_game_stats(existing, game)
+
+    return list(games_by_name.values())
+
+
 def extract_participants(title):
     return unique_in_order(name.lower() for name in re.findall(r"@(\w+)", title))
 
@@ -168,7 +195,7 @@ def update_streams_count(session):
 
 def import_games_stats(session):
     with open(games_path, encoding="utf-8") as f:
-        games = json.load(f)
+        games = deduplicate_games_stats(json.load(f))
 
     desired_game_ids = set()
 

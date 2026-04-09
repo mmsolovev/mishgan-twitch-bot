@@ -1,5 +1,6 @@
 import os
 import json
+from datetime import datetime
 from bs4 import BeautifulSoup
 
 BASE_DIR = os.path.dirname(os.path.dirname(__file__))
@@ -8,6 +9,37 @@ PAGES_DIR = os.path.join(BASE_DIR, "storage", "pages")
 OUTPUT_FILE = os.path.join(BASE_DIR, "storage", "games.json")
 
 all_games = []
+
+
+def parse_last_stream(value):
+    return datetime.strptime(value, "%d/%b/%Y")
+
+
+def choose_preferred_game_stats(current, candidate):
+    current_last_stream = parse_last_stream(current["last_stream"])
+    candidate_last_stream = parse_last_stream(candidate["last_stream"])
+
+    if candidate_last_stream != current_last_stream:
+        return candidate if candidate_last_stream > current_last_stream else current
+
+    if candidate["hours_streamed"] != current["hours_streamed"]:
+        return candidate if candidate["hours_streamed"] > current["hours_streamed"] else current
+
+    return candidate if candidate["rank"] < current["rank"] else current
+
+
+def deduplicate_games(games):
+    games_by_name = {}
+
+    for game in games:
+        existing = games_by_name.get(game["game"])
+        if existing is None:
+            games_by_name[game["game"]] = game
+            continue
+
+        games_by_name[game["game"]] = choose_preferred_game_stats(existing, game)
+
+    return sorted(games_by_name.values(), key=lambda item: (item["rank"], item["game"].lower()))
 
 
 def parse_file(path):
@@ -56,6 +88,7 @@ for file in sorted(os.listdir(PAGES_DIR)):
 
     all_games.extend(games)
 
+all_games = deduplicate_games(all_games)
 
 print("total games:", len(all_games))
 
