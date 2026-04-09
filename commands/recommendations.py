@@ -15,6 +15,12 @@ from utils.cooldowns import check_cooldown
 from utils.delays import human_delay
 
 
+async def _schedule_recommendation_sheets_sync(ctx, reason: str):
+    scheduler = getattr(ctx.bot, "recommendation_sheets_sync_scheduler", None)
+    if scheduler is not None:
+        await scheduler.schedule_sync(reason=reason)
+
+
 def setup(bot):
     register_command(
         "рек",
@@ -38,6 +44,8 @@ def setup(bot):
 
         if game_query == "-":
             result = await delete_own_last_recommendation(user_login=user_login)
+            if result.outcome == "deleted":
+                await _schedule_recommendation_sheets_sync(ctx, "recommendation_deleted_last")
             await ctx.send(result.message)
             return
 
@@ -50,6 +58,8 @@ def setup(bot):
                 query=target_query,
                 actor_login=user_login,
             )
+            if result.outcome == "deleted":
+                await _schedule_recommendation_sheets_sync(ctx, "recommendation_deleted_admin")
             await ctx.send(result.message)
             return
 
@@ -65,6 +75,7 @@ def setup(bot):
             )
 
             if result.accepted:
+                await _schedule_recommendation_sheets_sync(ctx, "recommendation_added_streamer")
                 channel_key = getattr(ctx.channel, "name", "") or "global"
                 ensure_recommendation_batch(channel_key, ctx.send)
                 await queue_recommendation_chat_message(
@@ -83,6 +94,8 @@ def setup(bot):
                 query=game_query[2:].strip(),
                 user_login=user_login,
             )
+            if result.outcome == "deleted":
+                await _schedule_recommendation_sheets_sync(ctx, "recommendation_deleted_by_title")
             await ctx.send(result.message)
             return
 
@@ -93,6 +106,7 @@ def setup(bot):
         )
 
         if result.accepted:
+            await _schedule_recommendation_sheets_sync(ctx, "recommendation_added")
             channel_key = getattr(ctx.channel, "name", "") or "global"
             ensure_recommendation_batch(channel_key, ctx.send)
             await queue_recommendation_chat_message(

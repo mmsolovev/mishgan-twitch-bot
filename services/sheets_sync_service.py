@@ -1,4 +1,6 @@
 from datetime import datetime
+from pathlib import Path
+import re
 
 from database.db import SessionLocal
 from database.models import Game, GameMeta, GameStats, RecommendedGame, Stream
@@ -10,9 +12,11 @@ from services.recommendations_service import STATUS_RELEASED, STATUS_UPCOMING, r
 SPREADSHEET_NAME = "Tabula Streams"
 STREAMS_SHEET_NAME = "СТРИМЫ"
 GAMES_SHEET_NAME = "ИГРЫ"
+BOT_INFO_SHEET_NAME = "БОТ"
 
 RELEASES_SHEET_NAME = "РЕЛИЗЫ"
 RECOMMENDATIONS_SHEET_NAME = "СОВЕТЫ"
+CHAT_COMMANDS_PATH = Path(__file__).resolve().parent.parent / "CHAT_COMMANDS.txt"
 
 
 def _stream_display_date(stream):
@@ -22,8 +26,8 @@ def _stream_display_date(stream):
 def _build_stream_row(stream):
     games = " -> ".join(stream_game.game.name for stream_game in stream.stream_games)
     participants = " ".join(participant.display_name for participant in stream.participants)
-    vod = f'=HYPERLINK("{stream.vod_url}"; "Twitch")' if stream.vod_url else ""
-    clips = f'=HYPERLINK("{stream.clips_url}"; "Клипы")' if stream.clips_url else ""
+    vod = _build_hyperlink_formula(stream.vod_url, "Twitch")
+    clips = _build_hyperlink_formula(stream.clips_url, "Клипы")
 
     return [
         _stream_display_date(stream),
@@ -67,7 +71,11 @@ def _build_hyperlink_formula(url, label="Steam"):
     if not normalized_url:
         return ""
 
-    normalized_url = normalized_url.replace('"', "%22")
+    normalized_url = re.sub(r"[\u200B-\u200D\uFEFF]", "", normalized_url)
+    normalized_url = re.sub(r"[\r\n\t]+", "", normalized_url)
+    normalized_url = re.sub(r"\s+", " ", normalized_url).strip()
+    normalized_url = normalized_url.replace('"', "")
+
     safe_label = str(label).replace('"', "")
     return f'=HYPERLINK("{normalized_url}"; "{safe_label}")'
 
@@ -390,7 +398,7 @@ def _build_games_dataset(session):
 
 def _build_game_row(game, stats, rank, manual_columns=None):
     meta = _get_or_create_game_meta(game)
-    steam = f'=ГИПЕРССЫЛКА("{meta.steam_url}"; "Steam")' if meta.steam_url else ""
+    steam = _build_hyperlink_formula(meta.steam_url)
 
     row = [
         format_dt(stats.last_stream) if stats.last_stream else "",
@@ -507,6 +515,19 @@ def _release_comparable_row(row):
     return comparable
 
 
+def _recommendation_comparable_row(row):
+    normalized_row = _normalize_row(row, 9)
+    comparable = []
+    for value in normalized_row:
+        if value is True:
+            comparable.append("TRUE")
+        elif value is False:
+            comparable.append("FALSE")
+        else:
+            comparable.append(str(value))
+    return comparable
+
+
 def _build_release_row(recommendation):
     steam = _build_hyperlink_formula(recommendation.steam_url)
     return [
@@ -550,7 +571,8 @@ def sync_streams():
     session.close()
 
     sheet.batch_clear(["A9:L1000"])
-    sheet.update("A9", rows, value_input_option="USER_ENTERED")
+    if rows:
+        sheet.update("A9", rows, value_input_option="USER_ENTERED")
     _format_streams_sheet(sheet, len(rows))
 
     print(f"Streams synced: {len(rows)}")
@@ -569,8 +591,9 @@ def sync_games():
     session.close()
 
     sheet.batch_clear(["A9:L1000"])
-    sheet.update("A9", rows, value_input_option="USER_ENTERED")
-    _format_games_sheet(sheet, len(rows))
+    if rows:
+        sheet.update("A9", rows, value_input_option="USER_ENTERED")
+        _format_games_sheet(sheet, len(rows))
 
     print(f"Games synced: {len(rows)}")
 
@@ -719,6 +742,9 @@ def sync_recommendations_safe():
     sheet = _get_or_create_worksheet(client, RECOMMENDATIONS_SHEET_NAME)
 
     session = SessionLocal()
+    values = sheet.get_all_values()
+    data_rows = values[8:] if len(values) > 8 else []
+
     recommendations = (
         session.query(RecommendedGame)
         .filter(RecommendedGame.status == STATUS_RELEASED)
@@ -726,10 +752,29 @@ def sync_recommendations_safe():
         .all()
     )
     rows = [_build_recommendation_row(recommendation) for recommendation in recommendations]
-    sheet.batch_clear(["A9:I1000"])
-    if rows:
-        sheet.update("A9", rows, value_input_option="USER_ENTERED")
-        _format_recommendations_sheet(sheet, len(rows))
 
-    print(f"Recommendations synced: {len(rows)}")
+    current_rows = [_recommendation_comparable_row(row) for row in data_rows]
+    comparable_final_rows = [_recommendation_comparable_row(row) for row in rows]
+
+    if current_rows != comparable_final_rows:
+        sheet.batch_clear(["A9:I1000"])
+        if rows:
+            sheet.update("A9", rows, value_input_option="USER_ENTERED")
+            _format_recommendations_sheet(sheet, len(rows))
+        print(f"Recommendations synced: {len(rows)}")
+    else:
+        print("Recommendations already in sync")
+
     session.close()
+
+
+def sync_bot_info():
+    sheet = _get_or_create_worksheet(get_client(), BOT_INFO_SHEET_NAME, rows="1000", cols="12")
+    text = CHAT_COMMANDS_PATH.read_text(encoding="utf-8").replace("\r\n", "\n")
+    current_text = (sheet.acell("A1").value or "").replace("\r\n", "\n")
+
+    if current_text != text:
+        sheet.update("A1", [[text]], value_input_option="RAW")
+        print("Bot info synced")
+    else:
+        print("Bot info already in sync")

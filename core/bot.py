@@ -7,6 +7,7 @@ from core.context import SafeContext
 from core.registry import load_commands
 from config.settings import BOT_PREFIX, TWITCH_CHANNEL, TWITCH_NICK, TWITCH_TOKEN
 from services.eventsub_service import EventSubService
+from services.recommendation_sheets_sync_service import RecommendationSheetsSyncScheduler
 
 
 class Bot(commands.Bot):
@@ -21,6 +22,7 @@ class Bot(commands.Bot):
 
         self.commands_loaded = False
         self.eventsub_service = EventSubService(self)
+        self.recommendation_sheets_sync_scheduler = RecommendationSheetsSyncScheduler()
 
     async def event_ready(self):
         if not self.commands_loaded:

@@ -11,12 +11,28 @@ OUTPUT_FILE = os.path.join(BASE_DIR, "storage", "streams.json")
 all_streams = []
 
 
+def unique_in_order(values):
+    seen = set()
+    result = []
+
+    for value in values:
+        if value in seen:
+            continue
+
+        seen.add(value)
+        result.append(value)
+
+    return result
+
+
 def parse_file(path):
 
     with open(path, encoding="utf-8") as f:
         soup = BeautifulSoup(f, "html.parser")
 
     table = soup.find("table", id="streams")
+    if table is None:
+        return []
 
     streams = []
 
@@ -35,6 +51,7 @@ def parse_file(path):
             for img in game_imgs
             if img.get("data-original-title")
         ]
+        games = unique_in_order(games)
 
         streams.append({
             "date": cols[0].get_text(strip=True),

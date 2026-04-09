@@ -180,11 +180,11 @@ def sync_game_stats(session, games_data: list[dict], game_cache: dict[str, Game]
 
     for data in games_data:
         game = get_or_create_game(session, game_cache, data["game"])
-        game_stats = session.get(GameStats, game.id)
+        game_stats = session.get(GameStats, {"game_id": game.id, "period": "all"})
         created = False
 
         if game_stats is None:
-            game_stats = GameStats(game_id=game.id)
+            game_stats = GameStats(game_id=game.id, period="all")
             session.add(game_stats)
             created = True
 
