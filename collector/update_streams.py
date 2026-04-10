@@ -1,30 +1,11 @@
 import os
 import json
-from datetime import datetime
 from bs4 import BeautifulSoup
 
 BASE_DIR = os.path.dirname(os.path.dirname(__file__))
 
 STREAMS_FILE = os.path.join(BASE_DIR, "storage", "streams.json")
 HTML_FILE = os.path.join(BASE_DIR, "storage", "pages", "new_stream_page.html")
-
-
-def unique_in_order(values):
-    seen = set()
-    result = []
-
-    for value in values:
-        if value in seen:
-            continue
-
-        seen.add(value)
-        result.append(value)
-
-    return result
-
-
-def parse_stream_date(value):
-    return datetime.strptime(value, "%d/%b/%Y %H:%M")
 
 
 def parse_stream_row(row):
@@ -54,7 +35,6 @@ def parse_stream_row(row):
         name = img.get("data-original-title")
         if name:
             games.append(name)
-    games = unique_in_order(games)
 
     return {
         "date": date,
@@ -100,31 +80,20 @@ def update_streams():
             new_streams.append(stream)
 
     existing = load_existing()
-    streams_by_date = {stream["date"]: stream for stream in existing}
+
+    existing_dates = {s["date"] for s in existing}
 
     added = 0
-    updated = 0
 
     for stream in new_streams:
-        current = streams_by_date.get(stream["date"])
 
-        if current is None:
+        if stream["date"] not in existing_dates:
+            existing.append(stream)
             added += 1
-        elif current != stream:
-            updated += 1
 
-        streams_by_date[stream["date"]] = stream
-
-    merged_streams = sorted(
-        streams_by_date.values(),
-        key=lambda stream: parse_stream_date(stream["date"])
-    )
-
-    save_streams(merged_streams)
+    save_streams(existing)
 
     print("new streams added:", added)
-    print("existing streams updated:", updated)
-    print("total streams:", len(merged_streams))
 
 
 if __name__ == "__main__":

@@ -323,7 +323,7 @@ class EventSubService:
                 message_parts.append(formatted_hltb)
 
         if GAMES_SHEET_URL:
-            message_parts.append(f"Таблица игр: {GAMES_SHEET_URL}")
+            message_parts.append(f"Все игры и стримы канала: {GAMES_SHEET_URL}")
 
         return " | ".join(message_parts)
 
