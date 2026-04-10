@@ -59,14 +59,14 @@ def _normalize_user_login(value: str) -> str:
 
 def _doc_suffix() -> str:
     if GAMES_SHEET_URL:
-        return f" Таблица: {GAMES_SHEET_URL}"
+        return f" Все в листах РЕЛИЗЫ и СОВЕТЫ тут: {GAMES_SHEET_URL}"
     return ""
 
 
 def build_recommendations_help_message() -> str:
     return (
         "Написать в чат: !рек [точное название игры] — предложить игру для стрима. "
-        "Пиши название максимально точно."
+        "Название лучше писать максимально точное."
         + _doc_suffix()
     )
 
@@ -387,7 +387,7 @@ def _enforce_user_limit(session, user_login: str) -> str | None:
 def _format_limit_suffix(removed_title: str | None) -> str:
     if not removed_title:
         return ""
-    return f" Самая старая рекомендация «{removed_title}» убрана из твоего списка."
+    return f" Самая старая рекомендация «{removed_title}» убрана из списка."
 
 
 def _make_result(outcome: str, message: str, recommendation: RecommendationSummary | None = None, accepted: bool = False) -> RecommendationActionResult:
@@ -410,17 +410,17 @@ def _make_fake_delete_result(query: str | None = None) -> RecommendationActionRe
 
 def _format_add_message(title: str, removed_title: str | None = None, already_existing: bool = False) -> str:
     prefix = (
-        f"Игра «{title}» уже есть в таблице, твоя рекомендация учтена."
+        f"Игра «{title}» уже есть в списке, рекомендация добавлена."
         if already_existing
-        else f"Игра «{title}» занесена в таблицу."
+        else f"Игра «{title}» занесена в список рекомендаций."
     )
-    return prefix + _format_limit_suffix(removed_title) + _doc_suffix()
+    return prefix + _format_limit_suffix(removed_title)
 
 
 async def recommend_game(query: str, user_login: str, user_display_name: str) -> RecommendationActionResult:
     normalized_query = normalize_recommendation_name(query)
     if not normalized_query:
-        return _make_result("invalid", "Напиши: !рек [название игры]")
+        return _make_result("invalid", "Написать в чат: !рек [название игры]")
 
     if _user_is_banned(user_login):
         return _make_fake_add_result(query)
@@ -451,7 +451,7 @@ async def recommend_game(query: str, user_login: str, user_display_name: str) ->
 
             existing_vote = _find_user_vote_for_recommendation(session, existing.id, user_login)
             if existing_vote:
-                return _make_result("duplicate_vote", f"Ты уже рекомендовал «{existing.title}».")
+                return _make_result("duplicate_vote", f"Уже рекомендована «{existing.title}».")
 
             removed_title = _enforce_user_limit(session, user_login)
             add_vote(session, existing, user_login, user_display_name)
@@ -469,7 +469,7 @@ async def recommend_game(query: str, user_login: str, user_display_name: str) ->
         if metadata is None:
             return _make_result(
                 "not_found",
-                f"Не нашел игру «{query}». Уточни название и напиши его максимально точно.",
+                f"Не удалось найти игру «{query}». Название лучше писать максимально точное.",
             )
 
         metadata_streamed_match = _find_streamed_game_match(metadata.title)
@@ -501,7 +501,7 @@ async def recommend_game(query: str, user_login: str, user_display_name: str) ->
 
             existing_vote = _find_user_vote_for_recommendation(session, existing.id, user_login)
             if existing_vote:
-                return _make_result("duplicate_vote", f"Ты уже рекомендовал «{existing.title}».")
+                return _make_result("duplicate_vote", f"Уже рекомендована «{existing.title}».")
 
             removed_title = _enforce_user_limit(session, user_login)
             add_vote(session, existing, user_login, user_display_name)
@@ -573,7 +573,7 @@ async def delete_own_last_recommendation(user_login: str) -> RecommendationActio
             .first()
         )
         if not vote:
-            return _make_result("not_found", "У тебя нет активных рекомендаций.")
+            return _make_result("not_found", "Нет активных рекомендаций.")
 
         title, deleted_recommendation = _remove_vote(session, vote)
         sync_recommendation_matches(session)
@@ -595,11 +595,11 @@ async def delete_own_recommendation_by_title(query: str, user_login: str) -> Rec
     try:
         recommendation = find_recommendation_by_query(session, query)
         if not recommendation:
-            return _make_result("not_found", f"Не нашел твою рекомендацию для «{query}».")
+            return _make_result("not_found", f"Не нашел рекомендацию для «{query}».")
 
         vote = _find_user_vote_for_recommendation(session, recommendation.id, user_login)
         if not vote:
-            return _make_result("not_found", f"Не нашел твою рекомендацию для «{recommendation.title}».")
+            return _make_result("not_found", f"Не нашел рекомендацию для «{recommendation.title}».")
 
         title, deleted_recommendation = _remove_vote(session, vote)
         sync_recommendation_matches(session)
@@ -612,7 +612,7 @@ async def delete_own_recommendation_by_title(query: str, user_login: str) -> Rec
 
 async def admin_delete_recommendations(target_user: str, query: str | None, actor_login: str) -> RecommendationActionResult:
     if not _user_is_admin(actor_login):
-        return _make_result("forbidden", "Команда доступна только ADMINS.")
+        return _make_result("forbidden", "Доступ к команде ограничен.")
 
     if _user_is_banned(actor_login):
         return _make_fake_delete_result(query)

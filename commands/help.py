@@ -1,5 +1,6 @@
 from twitchio.ext import commands
 
+from config.settings import GAMES_SHEET_URL
 from utils.cooldowns import check_cooldown
 from utils.delays import human_delay
 
@@ -54,6 +55,8 @@ def setup(bot):
             if message:
                 message += " | "
             message += "для не только лишь всех: " + ", ".join(sorted(mod_cmds))
+
+        message += f" | Подробная информация о командах на листе БОТ тут: {GAMES_SHEET_URL}"
 
         await ctx.send(message)
 
