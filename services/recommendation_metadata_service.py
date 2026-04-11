@@ -194,53 +194,57 @@ async def _igdb_query(session: aiohttp.ClientSession, body: str) -> list[dict] |
 
 
 def _pick_best_search_result(query: str, results: list[dict]) -> dict | None:
+    import time
+
     normalized_query = " ".join((query or "").casefold().split())
     if not normalized_query:
         return None
 
-    supported_results = [item for item in results if _get_supported_platform_tokens(item.get("platforms"))]
-    if not supported_results:
-        return None
+    now = int(time.time())
 
-    exact = []
-    partial = []
+    def is_valid(item):
+        return item.get("category") not in {1, 2, 3}  # DLC, expansion, bundle
 
-    for item in supported_results:
+    candidates = [item for item in results if is_valid(item)]
+
+    if not candidates:
+        candidates = results  # fallback
+
+    # мягкий фильтр платформ
+    supported = [
+        item for item in candidates
+        if _get_supported_platform_tokens(item.get("platforms"))
+    ]
+    if supported:
+        candidates = supported
+
+    def score(item):
         name = " ".join((item.get("name") or "").casefold().split())
         if not name:
-            continue
+            return -999
+
+        score = 0
+
         if name == normalized_query:
-            exact.append(item)
-        elif normalized_query in name:
-            partial.append(item)
+            score += 200
 
-    if exact:
-        exact.sort(
-            key=lambda item: (
-                -len(_get_supported_platform_tokens(item.get("platforms"))),
-                item.get("first_release_date") or 0,
-            ),
-            reverse=True,
-        )
-        return exact[0]
-    if partial:
-        partial.sort(
-            key=lambda item: (
-                -len(_get_supported_platform_tokens(item.get("platforms"))),
-                item.get("first_release_date") or 0,
-            ),
-            reverse=True,
-        )
-        return partial[0]
+        if all(word in name for word in normalized_query.split()):
+            score += 80
 
-    supported_results.sort(
-        key=lambda item: (
-            -len(_get_supported_platform_tokens(item.get("platforms"))),
-            item.get("first_release_date") or 0,
-        ),
-        reverse=True,
-    )
-    return supported_results[0]
+        release = item.get("first_release_date") or 0
+        if release > now:
+            score += 50
+
+        score += (item.get("total_rating_count") or 0) * 0.01
+
+        if "edition" in name:
+            score -= 30
+        if "bundle" in name:
+            score -= 40
+
+        return score
+
+    return max(candidates, key=score)
 
 
 async def fetch_recommendation_metadata(query: str) -> RecommendationMetadata | None:
@@ -254,12 +258,14 @@ async def fetch_recommendation_metadata(query: str) -> RecommendationMetadata | 
     async with aiohttp.ClientSession(timeout=timeout) as session:
         body = (
             "fields "
-            "id,name,summary,first_release_date,total_rating,total_rating_count,"
-            "aggregated_rating,aggregated_rating_count,genres.name,platforms.name,"
-            "websites.url,cover.url,category,version_parent;"
+            "id,name,slug,summary,first_release_date,"
+            "total_rating,total_rating_count,"
+            "aggregated_rating,aggregated_rating_count,"
+            "genres.name,platforms.name,"
+            "websites.url,cover.url,"
+            "category,version_parent,parent_game;"
             f' search "{search_query.replace(chr(34), "")}";'
-            " where version_parent = null & platforms != null;"
-            " limit 10;"
+            " limit 20;"
         )
         results = await _igdb_query(session, body)
         if not results:
