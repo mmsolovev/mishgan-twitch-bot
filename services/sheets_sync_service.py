@@ -143,6 +143,13 @@ def _format_streams_sheet(sheet, row_count):
         "horizontalAlignment": "LEFT",
     })
 
+    sheet.format(f"K{start_row}:K{end_row}", {
+        "textFormat": {
+            "fontFamily": "Montserrat",
+            "fontSize": 10,
+            "foregroundColor": {"red": 229 / 255, "green": 231 / 255, "blue": 235 / 255},},
+    })
+
 
 def _format_games_sheet(sheet, row_count):
     if row_count <= 0:
@@ -185,6 +192,12 @@ def _format_games_sheet(sheet, row_count):
         })
 
     sheet.spreadsheet.batch_update({"requests": requests})
+    sheet.format(f"L{start_row}:L{end_row}", {
+        "textFormat": {
+            "fontFamily": "Montserrat",
+            "fontSize": 10,
+            "foregroundColor": {"red": 229 / 255, "green": 231 / 255, "blue": 235 / 255},},
+    })
 
 
 def _format_releases_sheet(sheet, row_count):
@@ -273,6 +286,27 @@ def _format_releases_sheet(sheet, row_count):
         "verticalAlignment": "MIDDLE",
     })
 
+    sheet.format(f"D{start_row}:D{end_row}", {
+        "textFormat": {
+            "fontFamily": "Montserrat",
+            "fontSize": 12,
+            "foregroundColor": {"red": 229 / 255, "green": 231 / 255, "blue": 235 / 255},},
+    })
+
+    sheet.format(f"K{start_row}:K{end_row}", {
+        "textFormat": {
+            "fontFamily": "Montserrat",
+            "fontSize": 10,
+            "foregroundColor": {"red": 229 / 255, "green": 231 / 255, "blue": 235 / 255},},
+    })
+
+    sheet.format(f"L{start_row}:L{end_row}", {
+        "textFormat": {
+            "fontFamily": "Montserrat",
+            "fontSize": 12,
+            "foregroundColor": {"red": 229 / 255, "green": 231 / 255, "blue": 235 / 255},},
+    })
+
 
 def _format_recommendations_sheet(sheet, row_count):
     if row_count <= 0:
@@ -313,6 +347,27 @@ def _format_recommendations_sheet(sheet, row_count):
         },
         "horizontalAlignment": "CENTER",
         "verticalAlignment": "MIDDLE",
+    })
+
+    sheet.format(f"E{start_row}:E{end_row}", {
+        "textFormat": {
+            "fontFamily": "Montserrat",
+            "fontSize": 11,
+            "foregroundColor": {"red": 229 / 255, "green": 231 / 255, "blue": 235 / 255},},
+    })
+
+    sheet.format(f"F{start_row}:F{end_row}", {
+        "textFormat": {
+            "fontFamily": "Montserrat",
+            "fontSize": 10,
+            "foregroundColor": {"red": 229 / 255, "green": 231 / 255, "blue": 235 / 255},},
+    })
+
+    sheet.format(f"I{start_row}:I{end_row}", {
+        "textFormat": {
+            "fontFamily": "Montserrat",
+            "fontSize": 12,
+            "foregroundColor": {"red": 229 / 255, "green": 231 / 255, "blue": 235 / 255},},
     })
 
 
@@ -471,11 +526,18 @@ def _build_tags_text(recommendation):
 
 
 def _build_recommenders_text(recommendation):
-    return ", ".join(
-        vote.user_display_name
-        for vote in recommendation.votes
-        if vote.user_login != RECOMMENDATIONS_STREAMER_LOGIN.casefold()
-    )
+    result = []
+
+    for vote in recommendation.votes:
+        if vote.user_login == RECOMMENDATIONS_STREAMER_LOGIN.casefold():
+            continue
+
+        if vote.user_display_name.strip().lower() == "tabula":
+            result.append("В желаемом")
+        else:
+            result.append(vote.user_display_name)
+
+    return ", ".join(result)
 
 
 def _format_rating_value(recommendation):
@@ -637,8 +699,8 @@ def sync_streams_safe():
     if current_rows != comparable_final_rows:
         sheet.batch_clear(["A9:L1000"])
         if final_rows:
-            sheet.update("A9", final_rows, value_input_option="USER_ENTERED")
             _format_streams_sheet(sheet, len(final_rows))
+            sheet.update("A9", final_rows, value_input_option="USER_ENTERED")
         print(f"Reordered and synced {len(final_rows)} streams")
     else:
         print("Streams already in sync")
@@ -679,8 +741,8 @@ def sync_games_safe():
     if current_rows != comparable_final_rows:
         sheet.batch_clear(["A9:L1000"])
         if final_rows:
-            sheet.update("A9", final_rows, value_input_option="USER_ENTERED")
             _format_games_sheet(sheet, len(final_rows))
+            sheet.update("A9", final_rows, value_input_option="USER_ENTERED")
         print(f"Reordered and synced {len(final_rows)} games")
     else:
         print("Games already in sync")
@@ -711,8 +773,15 @@ def sync_releases_safe():
 
     recommendations = (
         session.query(RecommendedGame)
-        .filter(RecommendedGame.status == STATUS_UPCOMING)
-        .order_by(RecommendedGame.release_date.asc(), RecommendedGame.title.asc())
+        .filter(
+            (RecommendedGame.status == STATUS_UPCOMING) |
+            (RecommendedGame.release_date.is_(None))  # ← ВАЖНО
+        )
+        .order_by(
+            RecommendedGame.release_date.is_(None),  # сначала с датой
+            RecommendedGame.release_date.asc(),
+            RecommendedGame.title.asc(),
+        )
         .all()
     )
     rows = []
@@ -727,8 +796,9 @@ def sync_releases_safe():
     if current_rows != comparable_final_rows:
         sheet.batch_clear(["A9:L1000"])
         if rows:
-            sheet.update("A9", rows, value_input_option="USER_ENTERED")
             _format_releases_sheet(sheet, len(rows))
+            sheet.update("A9", rows, value_input_option="USER_ENTERED")
+
 
     print(f"Releases synced: {len(rows)}")
     session.commit()
@@ -747,7 +817,10 @@ def sync_recommendations_safe():
 
     recommendations = (
         session.query(RecommendedGame)
-        .filter(RecommendedGame.status == STATUS_RELEASED)
+        .filter(
+            RecommendedGame.status == STATUS_RELEASED,
+            RecommendedGame.release_date.is_not(None)  # ← ВАЖНО
+        )
         .order_by(RecommendedGame.release_date.asc(), RecommendedGame.title.asc())
         .all()
     )
@@ -759,8 +832,8 @@ def sync_recommendations_safe():
     if current_rows != comparable_final_rows:
         sheet.batch_clear(["A9:I1000"])
         if rows:
-            sheet.update("A9", rows, value_input_option="USER_ENTERED")
             _format_recommendations_sheet(sheet, len(rows))
+            sheet.update("A9", rows, value_input_option="USER_ENTERED")
         print(f"Recommendations synced: {len(rows)}")
     else:
         print("Recommendations already in sync")

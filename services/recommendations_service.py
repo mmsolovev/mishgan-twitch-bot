@@ -447,7 +447,7 @@ async def recommend_game(query: str, user_login: str, user_display_name: str) ->
                         recommendation=summary,
                         accepted=True,
                     )
-                return _make_result("duplicate_vote", f"Игра «{existing.title}» уже отмечена как интересная для Tabula.")
+                return _make_result("duplicate_vote", f"Игра «{existing.title}» уже отмечена как интересная стримеру.")
 
             existing_vote = _find_user_vote_for_recommendation(session, existing.id, user_login)
             if existing_vote:
@@ -497,7 +497,7 @@ async def recommend_game(query: str, user_login: str, user_display_name: str) ->
                         recommendation=summary,
                         accepted=True,
                     )
-                return _make_result("duplicate_vote", f"Игра «{existing.title}» уже отмечена как интересная для Tabula.")
+                return _make_result("duplicate_vote", f"Игра «{existing.title}» уже отмечена как интересная стримеру.")
 
             existing_vote = _find_user_vote_for_recommendation(session, existing.id, user_login)
             if existing_vote:
