@@ -310,3 +310,102 @@ async def fetch_recommendation_metadata(query: str) -> RecommendationMetadata | 
             source_game_id=str(game_id),
             source_payload=json.dumps(best_match, ensure_ascii=False),
         )
+
+
+async def fetch_top_upcoming_games(limit: int = 15) -> list[RecommendationMetadata]:
+    import time
+
+    now = int(time.time())
+    month_later = now + 30 * 24 * 60 * 60
+
+    logger = get_logger("recommendations.metadata")
+
+    timeout = aiohttp.ClientTimeout(total=15)
+
+    async with aiohttp.ClientSession(timeout=timeout) as session:
+        body = f"""
+        fields 
+            id,name,summary,
+            first_release_date,
+            hypes,follows,
+            genres.name,platforms.name,
+            websites.url,cover.url;
+
+        where 
+            first_release_date != null &
+            first_release_date >= {now} &
+            first_release_date <= {month_later};
+
+        sort hypes desc;
+        limit 50;
+        """
+
+        results = await _igdb_query(session, body)
+
+        if not results:
+            return []
+
+        output: list[RecommendationMetadata] = []
+
+        for game in results:
+            # ---- фильтрация в Python ----
+            release_ts = game.get("first_release_date")
+            hypes = game.get("hypes") or 0
+
+            if not release_ts:
+                continue
+
+            if release_ts < now or release_ts > month_later:
+                continue
+
+
+
+            # ---- release date ----
+            release_date, release_precision = _parse_release_date(release_ts)
+
+            # ---- cover ----
+            cover = game.get("cover") or {}
+            cover_url = (cover.get("url") or "").strip()
+
+            if cover_url.startswith("//"):
+                cover_url = f"https:{cover_url}"
+            elif cover_url.startswith("/"):
+                cover_url = f"https://images.igdb.com{cover_url}"
+
+            # ---- steam (если есть) ----
+            steam_url = None
+            for website in game.get("websites") or []:
+                url = (website.get("url") or "").strip()
+                if any(marker in url.casefold() for marker in _STEAM_HOST_MARKERS):
+                    steam_url = url
+                    break
+
+            output.append(
+                RecommendationMetadata(
+                    title=game.get("name") or "Unknown",
+                    description_short=_truncate_text(game.get("summary")),
+                    release_date=release_date,
+                    release_precision=release_precision,
+                    steam_url=steam_url,
+                    rating_text=_build_rating_text(game),
+                    platforms_text=_build_platforms_text(game.get("platforms")),
+                    genres_text=_join_names(game.get("genres")),
+                    cover_url=cover_url or None,
+                    source_name="igdb",
+                    source_game_id=str(game.get("id")),
+                    source_payload=json.dumps(game, ensure_ascii=False),
+                )
+            )
+
+            if len(output) >= limit:
+                break
+
+        # сортировка: самые ожидаемые вверх
+        output.sort(
+            key=lambda x: (
+                x.release_date is None,
+                -(game.get("hypes") or 0)
+            )
+        )
+
+        return output

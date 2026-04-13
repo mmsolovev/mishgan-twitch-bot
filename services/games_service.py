@@ -85,7 +85,7 @@ def _format_status(liked: bool | None, completed: bool | None) -> str | None:
 
 def _doc_suffix() -> str:
     if GAMES_SHEET_URL:
-        return f" | Информация о всех стримах и играх канала тут {GAMES_SHEET_URL}"
+        return f" | Все стримы и игры канала {GAMES_SHEET_URL}"
     return " Таблица игр: ссылка не настроена"
 
 
@@ -276,7 +276,7 @@ def build_game_response(query: str) -> str:
 
     similar_matches = _find_similar_matches(query, ranked_games)
     if not similar_matches:
-        return f"Игру «{query}» не нашел, и похожих вариантов тоже нет. Скорее всего этой игры на стримах не было." + _doc_suffix()
+        return f"Игра «{query}» не найдена, и похожих вариантов тоже нет. Скорее всего этой игры на стримах не было." + _doc_suffix()
 
     best_match = similar_matches[0]
     other_matches = similar_matches[1:]
@@ -292,7 +292,7 @@ def build_game_response(query: str) -> str:
 
     suggestions = _format_suggestions(similar_matches)
     return (
-        f"Точного совпадения для «{query}» не нашел. Возможно, имелось в виду: {suggestions}. "
+        f"Точного совпадения для «{query}» не найдено. Возможно, имелось в виду: {suggestions}. "
         "Если ничего не подходит, скорее всего этой игры на стримах не было."
         + _doc_suffix()
     )

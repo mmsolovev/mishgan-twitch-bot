@@ -1,5 +1,6 @@
 import asyncio
 import random
+import re
 import time
 
 from twitchio.ext.eventsub.websocket import EventSubWSClient
@@ -342,19 +343,45 @@ class EventSubService:
         return value.strftime("%d.%m.%Y")
 
     @staticmethod
+    def _is_valid_hltb_value(value: str) -> bool:
+        if not value:
+            return False
+
+        value = value.strip().lower()
+
+        # отсекаем явные заглушки
+        if value in {"?", "??", "н/д", "n/a", "unknown"}:
+            return False
+
+        # отсекаем строки с вопросами типа "?-?"
+        if "?" in value:
+            return False
+
+        # проверка на наличие чисел (хотя бы одно)
+        if not re.search(r"\d", value):
+            return False
+
+        return True
+
+    @staticmethod
     def _format_hltb_for_game_change(summary: str) -> str | None:
         if not summary:
             return None
 
         parts = [part.strip() for part in summary.split("|")]
+
         if len(parts) < 3:
-            return summary
+            return None
 
         story = parts[1].removeprefix("Сюжет:").strip()
         extra = parts[2].removeprefix("Доп:").strip()
 
-        if not story or not extra:
-            return summary
+        # ❗ главное правило: если нет нормальных данных — ничего не выводим
+        if not EventSubService._is_valid_hltb_value(story):
+            return None
+
+        if not EventSubService._is_valid_hltb_value(extra):
+            return None
 
         return f"Прохождение по HLTB {story}-{extra} часов"
 
@@ -372,4 +399,4 @@ class EventSubService:
             return False
 
         normalized = " ".join(category_name.casefold().split())
-        return normalized in {"just chatting", "special events", "games + demos"}
+        return normalized in {"just chatting", "special events", "games + demos", ""}
