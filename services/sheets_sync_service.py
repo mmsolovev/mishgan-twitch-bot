@@ -150,6 +150,21 @@ def _format_streams_sheet(sheet, row_count):
             "foregroundColor": {"red": 229 / 255, "green": 231 / 255, "blue": 235 / 255},},
     })
 
+    sheet.format(f"E{start_row}:E{end_row}", {
+        "textFormat": {
+            "fontFamily": "Orbitron",
+            "fontSize": 14,
+            "bold": True,
+            "foregroundColor": {
+                "red": 153 / 255,
+                "green": 76 / 255,
+                "blue": 255 / 255,
+            },
+        },
+        "horizontalAlignment": "CENTER",
+        "verticalAlignment": "MIDDLE",
+    })
+
 
 def _format_games_sheet(sheet, row_count):
     if row_count <= 0:
@@ -270,6 +285,7 @@ def _format_releases_sheet(sheet, row_count):
         "textFormat": {
             "fontFamily": "Orbitron",
             "fontSize": 14,
+            "bold": True,
             "foregroundColor": {"red": 102 / 255, "green": 192 / 255, "blue": 244 / 255},
         },
         "horizontalAlignment": "CENTER",
@@ -343,6 +359,7 @@ def _format_recommendations_sheet(sheet, row_count):
         "textFormat": {
             "fontFamily": "Orbitron",
             "fontSize": 14,
+            "bold": True,
             "foregroundColor": {"red": 102 / 255, "green": 192 / 255, "blue": 244 / 255},
         },
         "horizontalAlignment": "CENTER",
@@ -529,11 +546,16 @@ def _build_recommenders_text(recommendation):
     result = []
 
     for vote in recommendation.votes:
-        if vote.user_login == RECOMMENDATIONS_STREAMER_LOGIN.casefold():
+        if vote.user_login in {
+            RECOMMENDATIONS_STREAMER_LOGIN.casefold(),
+            "igdb"
+        }:
             continue
 
         if vote.user_display_name.strip().lower() == "tabula":
             result.append("В желаемом")
+        elif vote.user_display_name.strip().lower() == "igdb":
+            result.append("Хайповое")
         else:
             result.append(vote.user_display_name)
 

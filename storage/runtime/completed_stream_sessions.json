@@ -6016,6 +6016,3379 @@
         "completed_at": "2026-04-08T16:22:22.868163+00:00",
         "completion_reason": "eventsub.stream_offline"
       }
+    },
+    {
+      "version": 2,
+      "status": "completed",
+      "channel_login": "tabula",
+      "broadcaster_id": "600513126",
+      "stream_id": "315805967189",
+      "started_at": "2026-04-13T11:29:14+00:00",
+      "ended_at": "2026-04-13T16:56:59.834387+00:00",
+      "duration_minutes": 327.76,
+      "title": "ЧЕРВИВЫЙ ПОНЕДЕЛЬНИК feat @hyver @namvseyasno @juice",
+      "category_name": "Worms W.M.D",
+      "category_id": "493036",
+      "title_history": [
+        {
+          "title": "ЧЕРВИВЫЙ РЕВАНШ",
+          "changed_at": "2026-04-13T11:29:14+00:00",
+          "source": "eventsub.stream_online"
+        },
+        {
+          "title": "ЧЕРВИВЫЙ ПОНЕДЕЛЬНИК",
+          "changed_at": "2026-04-13T12:41:10.961628+00:00",
+          "source": "eventsub.channel_update"
+        },
+        {
+          "title": "ЧЕРВИВЫЙ ПОНЕДЕЛЬНИК feat @hyver @namvseyasno @juice",
+          "changed_at": "2026-04-13T13:38:35.747797+00:00",
+          "source": "eventsub.channel_update"
+        }
+      ],
+      "category_history": [
+        {
+          "category_id": "509658",
+          "category_name": "Just Chatting",
+          "changed_at": "2026-04-13T11:29:14+00:00",
+          "source": "eventsub.stream_online"
+        },
+        {
+          "category_id": "493036",
+          "category_name": "Worms W.M.D",
+          "changed_at": "2026-04-13T13:03:54.778258+00:00",
+          "source": "eventsub.channel_update"
+        }
+      ],
+      "game_segments": [
+        {
+          "category_id": "509658",
+          "category_name": "Just Chatting",
+          "started_at": "2026-04-13T11:29:14+00:00",
+          "ended_at": "2026-04-13T13:03:54.778258+00:00",
+          "source": "eventsub.stream_online",
+          "followers_gained": 0,
+          "followers_per_hour": 0.0
+        },
+        {
+          "category_id": "493036",
+          "category_name": "Worms W.M.D",
+          "started_at": "2026-04-13T13:03:54.778258+00:00",
+          "ended_at": "2026-04-13T16:56:59.834387+00:00",
+          "source": "eventsub.channel_update",
+          "followers_gained": 0,
+          "followers_per_hour": 0.0
+        }
+      ],
+      "events": [
+        {
+          "type": "stream.session_started",
+          "timestamp": "2026-04-13T11:29:31.642623+00:00",
+          "payload": {
+            "stream_id": "315805967189",
+            "started_at": "2026-04-13T11:29:14+00:00",
+            "title": "ЧЕРВИВЫЙ РЕВАНШ",
+            "category_name": "Just Chatting",
+            "source": "eventsub.stream_online"
+          }
+        },
+        {
+          "type": "channel.update",
+          "timestamp": "2026-04-13T12:41:10.961650+00:00",
+          "payload": {
+            "title": "ЧЕРВИВЫЙ ПОНЕДЕЛЬНИК",
+            "category_id": "509658",
+            "category_name": "Just Chatting",
+            "changed_at": "2026-04-13T12:41:10.961628+00:00"
+          }
+        },
+        {
+          "type": "channel.update",
+          "timestamp": "2026-04-13T13:03:54.778274+00:00",
+          "payload": {
+            "title": "ЧЕРВИВЫЙ ПОНЕДЕЛЬНИК",
+            "category_id": "493036",
+            "category_name": "Worms W.M.D",
+            "changed_at": "2026-04-13T13:03:54.778258+00:00"
+          }
+        },
+        {
+          "type": "channel.update",
+          "timestamp": "2026-04-13T13:38:35.747823+00:00",
+          "payload": {
+            "title": "ЧЕРВИВЫЙ ПОНЕДЕЛЬНИК feat @hyver @namvseyasno @juice",
+            "category_id": "493036",
+            "category_name": "Worms W.M.D",
+            "changed_at": "2026-04-13T13:38:35.747797+00:00"
+          }
+        }
+      ],
+      "metrics": {
+        "sample_interval_seconds": 60,
+        "viewer_samples": [
+          {
+            "viewer_count": 0,
+            "sampled_at": "2026-04-13T11:29:31.648273+00:00",
+            "source": "stream.online"
+          },
+          {
+            "viewer_count": 13,
+            "sampled_at": "2026-04-13T11:30:31.866724+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "viewer_count": 13,
+            "sampled_at": "2026-04-13T11:31:32.530828+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "viewer_count": 13,
+            "sampled_at": "2026-04-13T11:32:33.014456+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "viewer_count": 13,
+            "sampled_at": "2026-04-13T11:33:33.685945+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "viewer_count": 13,
+            "sampled_at": "2026-04-13T11:34:34.343440+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "viewer_count": 397,
+            "sampled_at": "2026-04-13T11:35:35.029307+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "viewer_count": 397,
+            "sampled_at": "2026-04-13T11:36:35.492536+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "viewer_count": 397,
+            "sampled_at": "2026-04-13T11:37:36.176968+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "viewer_count": 397,
+            "sampled_at": "2026-04-13T11:38:36.841411+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "viewer_count": 397,
+            "sampled_at": "2026-04-13T11:39:37.512664+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "viewer_count": 710,
+            "sampled_at": "2026-04-13T11:40:38.219290+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "viewer_count": 710,
+            "sampled_at": "2026-04-13T11:41:38.883412+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "viewer_count": 710,
+            "sampled_at": "2026-04-13T11:42:39.554584+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "viewer_count": 788,
+            "sampled_at": "2026-04-13T11:43:40.253800+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "viewer_count": 788,
+            "sampled_at": "2026-04-13T11:44:40.898330+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "viewer_count": 788,
+            "sampled_at": "2026-04-13T11:45:41.561784+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "viewer_count": 899,
+            "sampled_at": "2026-04-13T11:46:42.226598+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "viewer_count": 899,
+            "sampled_at": "2026-04-13T11:47:42.918680+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "viewer_count": 899,
+            "sampled_at": "2026-04-13T11:48:43.604140+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "viewer_count": 1060,
+            "sampled_at": "2026-04-13T11:49:44.282226+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "viewer_count": 1060,
+            "sampled_at": "2026-04-13T11:50:44.953888+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "viewer_count": 1060,
+            "sampled_at": "2026-04-13T11:51:45.736420+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "viewer_count": 1091,
+            "sampled_at": "2026-04-13T11:52:46.205470+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "viewer_count": 1091,
+            "sampled_at": "2026-04-13T11:53:46.872212+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "viewer_count": 1091,
+            "sampled_at": "2026-04-13T11:54:47.702374+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "viewer_count": 1091,
+            "sampled_at": "2026-04-13T11:55:48.341051+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "viewer_count": 1183,
+            "sampled_at": "2026-04-13T11:56:49.141960+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "viewer_count": 1183,
+            "sampled_at": "2026-04-13T11:57:49.813509+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "viewer_count": 1183,
+            "sampled_at": "2026-04-13T11:58:50.513074+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "viewer_count": 1183,
+            "sampled_at": "2026-04-13T11:59:51.198153+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "viewer_count": 1300,
+            "sampled_at": "2026-04-13T12:00:51.966410+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "viewer_count": 1300,
+            "sampled_at": "2026-04-13T12:01:52.617069+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "viewer_count": 1300,
+            "sampled_at": "2026-04-13T12:02:53.496993+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "viewer_count": 1300,
+            "sampled_at": "2026-04-13T12:03:54.147590+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "viewer_count": 1300,
+            "sampled_at": "2026-04-13T12:04:54.804925+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "viewer_count": 1265,
+            "sampled_at": "2026-04-13T12:05:55.462648+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "viewer_count": 1265,
+            "sampled_at": "2026-04-13T12:06:56.120161+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "viewer_count": 1265,
+            "sampled_at": "2026-04-13T12:07:56.916621+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "viewer_count": 1374,
+            "sampled_at": "2026-04-13T12:08:57.560457+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "viewer_count": 1374,
+            "sampled_at": "2026-04-13T12:09:58.287524+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "viewer_count": 1374,
+            "sampled_at": "2026-04-13T12:10:59.986935+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "viewer_count": 1374,
+            "sampled_at": "2026-04-13T12:12:00.880974+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "viewer_count": 1348,
+            "sampled_at": "2026-04-13T12:13:01.684812+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "viewer_count": 1348,
+            "sampled_at": "2026-04-13T12:14:02.334470+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "viewer_count": 1348,
+            "sampled_at": "2026-04-13T12:15:02.992397+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "viewer_count": 1348,
+            "sampled_at": "2026-04-13T12:16:03.687894+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "viewer_count": 1348,
+            "sampled_at": "2026-04-13T12:17:04.348903+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "viewer_count": 1396,
+            "sampled_at": "2026-04-13T12:18:05.006598+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "viewer_count": 1396,
+            "sampled_at": "2026-04-13T12:19:05.678393+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "viewer_count": 1396,
+            "sampled_at": "2026-04-13T12:20:06.335418+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "viewer_count": 1396,
+            "sampled_at": "2026-04-13T12:21:07.014083+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "viewer_count": 1323,
+            "sampled_at": "2026-04-13T12:22:07.768654+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "viewer_count": 1323,
+            "sampled_at": "2026-04-13T12:23:08.426013+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "viewer_count": 1323,
+            "sampled_at": "2026-04-13T12:24:09.208838+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "viewer_count": 1323,
+            "sampled_at": "2026-04-13T12:25:10.026463+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "viewer_count": 1323,
+            "sampled_at": "2026-04-13T12:26:10.878676+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "viewer_count": 1374,
+            "sampled_at": "2026-04-13T12:27:11.536162+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "viewer_count": 1374,
+            "sampled_at": "2026-04-13T12:28:12.401813+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "viewer_count": 1374,
+            "sampled_at": "2026-04-13T12:29:13.107668+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "viewer_count": 1374,
+            "sampled_at": "2026-04-13T12:30:13.760264+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "viewer_count": 1374,
+            "sampled_at": "2026-04-13T12:31:14.415958+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "viewer_count": 1374,
+            "sampled_at": "2026-04-13T12:32:15.073488+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "viewer_count": 1374,
+            "sampled_at": "2026-04-13T12:33:15.717580+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "viewer_count": 1374,
+            "sampled_at": "2026-04-13T12:34:16.375190+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "viewer_count": 1356,
+            "sampled_at": "2026-04-13T12:35:17.032379+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "viewer_count": 1356,
+            "sampled_at": "2026-04-13T12:36:17.704064+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "viewer_count": 1356,
+            "sampled_at": "2026-04-13T12:37:18.375516+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "viewer_count": 1316,
+            "sampled_at": "2026-04-13T12:38:19.026140+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "viewer_count": 1316,
+            "sampled_at": "2026-04-13T12:39:19.822529+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "viewer_count": 1316,
+            "sampled_at": "2026-04-13T12:40:20.605359+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "viewer_count": 1316,
+            "sampled_at": "2026-04-13T12:41:21.262742+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "viewer_count": 1451,
+            "sampled_at": "2026-04-13T12:42:21.929287+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "viewer_count": 1451,
+            "sampled_at": "2026-04-13T12:43:22.737643+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "viewer_count": 1451,
+            "sampled_at": "2026-04-13T12:44:23.409353+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "viewer_count": 1451,
+            "sampled_at": "2026-04-13T12:45:24.059821+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "viewer_count": 1410,
+            "sampled_at": "2026-04-13T12:46:24.849783+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "viewer_count": 1410,
+            "sampled_at": "2026-04-13T12:47:25.514707+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "viewer_count": 1410,
+            "sampled_at": "2026-04-13T12:48:26.185348+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "viewer_count": 1425,
+            "sampled_at": "2026-04-13T12:49:26.873230+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "viewer_count": 1425,
+            "sampled_at": "2026-04-13T12:50:27.695443+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "viewer_count": 1425,
+            "sampled_at": "2026-04-13T12:51:28.609825+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "viewer_count": 1425,
+            "sampled_at": "2026-04-13T12:52:29.461804+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "viewer_count": 1425,
+            "sampled_at": "2026-04-13T12:53:30.265274+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "viewer_count": 1409,
+            "sampled_at": "2026-04-13T12:54:31.109993+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "viewer_count": 1409,
+            "sampled_at": "2026-04-13T12:55:31.795740+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "viewer_count": 1409,
+            "sampled_at": "2026-04-13T12:56:32.488286+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "viewer_count": 1409,
+            "sampled_at": "2026-04-13T12:57:33.388989+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "viewer_count": 1433,
+            "sampled_at": "2026-04-13T12:58:34.241583+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "viewer_count": 1433,
+            "sampled_at": "2026-04-13T12:59:34.975023+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "viewer_count": 1433,
+            "sampled_at": "2026-04-13T13:00:35.694970+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "viewer_count": 1433,
+            "sampled_at": "2026-04-13T13:01:36.415760+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "viewer_count": 1433,
+            "sampled_at": "2026-04-13T13:02:37.100619+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "viewer_count": 1433,
+            "sampled_at": "2026-04-13T13:03:37.806910+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "viewer_count": 1433,
+            "sampled_at": "2026-04-13T13:04:38.500232+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "viewer_count": 1495,
+            "sampled_at": "2026-04-13T13:05:39.191507+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "viewer_count": 1495,
+            "sampled_at": "2026-04-13T13:06:39.925620+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "viewer_count": 1495,
+            "sampled_at": "2026-04-13T13:07:40.757575+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "viewer_count": 1495,
+            "sampled_at": "2026-04-13T13:08:41.601847+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "viewer_count": 1456,
+            "sampled_at": "2026-04-13T13:09:42.310122+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "viewer_count": 1456,
+            "sampled_at": "2026-04-13T13:10:43.021490+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "viewer_count": 1456,
+            "sampled_at": "2026-04-13T13:11:43.984764+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "viewer_count": 1456,
+            "sampled_at": "2026-04-13T13:12:44.676689+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "viewer_count": 1528,
+            "sampled_at": "2026-04-13T13:13:45.514917+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "viewer_count": 1528,
+            "sampled_at": "2026-04-13T13:14:46.415673+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "viewer_count": 1528,
+            "sampled_at": "2026-04-13T13:15:47.129168+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "viewer_count": 1528,
+            "sampled_at": "2026-04-13T13:16:47.978526+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "viewer_count": 1528,
+            "sampled_at": "2026-04-13T13:17:48.696529+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "viewer_count": 1522,
+            "sampled_at": "2026-04-13T13:18:49.380093+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "viewer_count": 1560,
+            "sampled_at": "2026-04-13T13:19:50.197028+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "viewer_count": 1576,
+            "sampled_at": "2026-04-13T13:20:51.042850+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "viewer_count": 1595,
+            "sampled_at": "2026-04-13T13:21:51.741244+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "viewer_count": 1611,
+            "sampled_at": "2026-04-13T13:22:52.239524+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "viewer_count": 1611,
+            "sampled_at": "2026-04-13T13:23:52.883182+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "viewer_count": 1642,
+            "sampled_at": "2026-04-13T13:24:53.582104+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "viewer_count": 1617,
+            "sampled_at": "2026-04-13T13:25:54.101231+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "viewer_count": 1641,
+            "sampled_at": "2026-04-13T13:26:54.952897+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "viewer_count": 1641,
+            "sampled_at": "2026-04-13T13:27:55.624360+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "viewer_count": 1609,
+            "sampled_at": "2026-04-13T13:28:56.337326+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "viewer_count": 1609,
+            "sampled_at": "2026-04-13T13:29:57.064595+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "viewer_count": 1609,
+            "sampled_at": "2026-04-13T13:30:57.756813+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "viewer_count": 1609,
+            "sampled_at": "2026-04-13T13:31:58.511767+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "viewer_count": 1573,
+            "sampled_at": "2026-04-13T13:32:59.391949+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "viewer_count": 1573,
+            "sampled_at": "2026-04-13T13:34:00.215948+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "viewer_count": 1573,
+            "sampled_at": "2026-04-13T13:35:01.026496+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "viewer_count": 1598,
+            "sampled_at": "2026-04-13T13:36:01.746682+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "viewer_count": 1697,
+            "sampled_at": "2026-04-13T13:37:02.459755+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "viewer_count": 1697,
+            "sampled_at": "2026-04-13T13:38:03.291579+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "viewer_count": 1800,
+            "sampled_at": "2026-04-13T13:39:04.136284+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "viewer_count": 1657,
+            "sampled_at": "2026-04-13T13:40:04.835848+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "viewer_count": 1657,
+            "sampled_at": "2026-04-13T13:41:05.993425+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "viewer_count": 1677,
+            "sampled_at": "2026-04-13T13:42:06.758705+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "viewer_count": 1677,
+            "sampled_at": "2026-04-13T13:43:07.454384+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "viewer_count": 1704,
+            "sampled_at": "2026-04-13T13:44:08.278772+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "viewer_count": 1704,
+            "sampled_at": "2026-04-13T13:45:08.991955+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "viewer_count": 1738,
+            "sampled_at": "2026-04-13T13:46:09.711925+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "viewer_count": 1764,
+            "sampled_at": "2026-04-13T13:47:10.453141+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "viewer_count": 1745,
+            "sampled_at": "2026-04-13T13:48:11.159272+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "viewer_count": 1745,
+            "sampled_at": "2026-04-13T13:49:11.887134+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "viewer_count": 1745,
+            "sampled_at": "2026-04-13T13:50:12.586059+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "viewer_count": 1788,
+            "sampled_at": "2026-04-13T13:51:13.326679+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "viewer_count": 1788,
+            "sampled_at": "2026-04-13T13:52:14.171741+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "viewer_count": 1803,
+            "sampled_at": "2026-04-13T13:53:15.030765+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "viewer_count": 1803,
+            "sampled_at": "2026-04-13T13:54:15.704737+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "viewer_count": 1803,
+            "sampled_at": "2026-04-13T13:55:16.399446+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "viewer_count": 1772,
+            "sampled_at": "2026-04-13T13:56:17.093922+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "viewer_count": 1808,
+            "sampled_at": "2026-04-13T13:57:17.779234+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "viewer_count": 1785,
+            "sampled_at": "2026-04-13T13:58:18.631740+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "viewer_count": 1828,
+            "sampled_at": "2026-04-13T13:59:19.367062+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "viewer_count": 1877,
+            "sampled_at": "2026-04-13T14:00:20.217513+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "viewer_count": 1841,
+            "sampled_at": "2026-04-13T14:01:21.090348+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "viewer_count": 1819,
+            "sampled_at": "2026-04-13T14:02:21.959851+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "viewer_count": 1819,
+            "sampled_at": "2026-04-13T14:03:22.808739+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "viewer_count": 1817,
+            "sampled_at": "2026-04-13T14:04:23.542541+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "viewer_count": 1842,
+            "sampled_at": "2026-04-13T14:05:24.249009+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "viewer_count": 1842,
+            "sampled_at": "2026-04-13T14:06:25.239745+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "viewer_count": 1842,
+            "sampled_at": "2026-04-13T14:07:25.932571+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "viewer_count": 1823,
+            "sampled_at": "2026-04-13T14:08:26.654724+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "viewer_count": 1872,
+            "sampled_at": "2026-04-13T14:09:27.525515+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "viewer_count": 1872,
+            "sampled_at": "2026-04-13T14:10:28.238303+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "viewer_count": 1872,
+            "sampled_at": "2026-04-13T14:11:29.062767+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "viewer_count": 1872,
+            "sampled_at": "2026-04-13T14:12:29.810620+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "viewer_count": 1872,
+            "sampled_at": "2026-04-13T14:13:30.607443+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "viewer_count": 1872,
+            "sampled_at": "2026-04-13T14:14:31.285917+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "viewer_count": 1852,
+            "sampled_at": "2026-04-13T14:15:31.944063+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "viewer_count": 1852,
+            "sampled_at": "2026-04-13T14:16:32.748836+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "viewer_count": 1852,
+            "sampled_at": "2026-04-13T14:17:33.418816+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "viewer_count": 1867,
+            "sampled_at": "2026-04-13T14:18:34.249382+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "viewer_count": 1890,
+            "sampled_at": "2026-04-13T14:19:34.929500+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "viewer_count": 1924,
+            "sampled_at": "2026-04-13T14:20:36.696939+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "viewer_count": 1924,
+            "sampled_at": "2026-04-13T14:21:37.535460+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "viewer_count": 1924,
+            "sampled_at": "2026-04-13T14:22:38.373173+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "viewer_count": 1958,
+            "sampled_at": "2026-04-13T14:23:39.058677+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "viewer_count": 1853,
+            "sampled_at": "2026-04-13T14:24:39.869833+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "viewer_count": 1825,
+            "sampled_at": "2026-04-13T14:25:40.556194+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "viewer_count": 1825,
+            "sampled_at": "2026-04-13T14:26:41.227876+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "viewer_count": 1825,
+            "sampled_at": "2026-04-13T14:27:41.897375+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "viewer_count": 1825,
+            "sampled_at": "2026-04-13T14:28:42.555030+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "viewer_count": 1776,
+            "sampled_at": "2026-04-13T14:29:43.198864+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "viewer_count": 1770,
+            "sampled_at": "2026-04-13T14:30:43.859835+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "viewer_count": 1776,
+            "sampled_at": "2026-04-13T14:31:44.548644+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "viewer_count": 1776,
+            "sampled_at": "2026-04-13T14:32:45.213599+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "viewer_count": 1804,
+            "sampled_at": "2026-04-13T14:33:46.028757+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "viewer_count": 1854,
+            "sampled_at": "2026-04-13T14:34:46.820135+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "viewer_count": 1816,
+            "sampled_at": "2026-04-13T14:35:47.477755+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "viewer_count": 1816,
+            "sampled_at": "2026-04-13T14:36:48.163000+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "viewer_count": 1816,
+            "sampled_at": "2026-04-13T14:37:48.834766+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "viewer_count": 1816,
+            "sampled_at": "2026-04-13T14:38:49.652342+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "viewer_count": 1795,
+            "sampled_at": "2026-04-13T14:39:50.316848+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "viewer_count": 1795,
+            "sampled_at": "2026-04-13T14:40:50.779756+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "viewer_count": 1830,
+            "sampled_at": "2026-04-13T14:41:51.444380+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "viewer_count": 1796,
+            "sampled_at": "2026-04-13T14:42:52.123221+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "viewer_count": 1772,
+            "sampled_at": "2026-04-13T14:43:52.780572+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "viewer_count": 1793,
+            "sampled_at": "2026-04-13T14:44:53.576790+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "viewer_count": 1793,
+            "sampled_at": "2026-04-13T14:45:54.401145+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "viewer_count": 1793,
+            "sampled_at": "2026-04-13T14:46:55.044979+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "viewer_count": 1775,
+            "sampled_at": "2026-04-13T14:47:55.709834+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "viewer_count": 1775,
+            "sampled_at": "2026-04-13T14:48:56.380902+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "viewer_count": 1775,
+            "sampled_at": "2026-04-13T14:49:57.059736+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "viewer_count": 1764,
+            "sampled_at": "2026-04-13T14:50:57.724180+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "viewer_count": 1767,
+            "sampled_at": "2026-04-13T14:51:58.402353+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "viewer_count": 1761,
+            "sampled_at": "2026-04-13T14:52:59.243246+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "viewer_count": 1761,
+            "sampled_at": "2026-04-13T14:54:00.043947+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "viewer_count": 1727,
+            "sampled_at": "2026-04-13T14:55:00.722915+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "viewer_count": 1727,
+            "sampled_at": "2026-04-13T14:56:01.401139+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "viewer_count": 1727,
+            "sampled_at": "2026-04-13T14:57:02.225669+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "viewer_count": 1727,
+            "sampled_at": "2026-04-13T14:58:03.035083+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "viewer_count": 1768,
+            "sampled_at": "2026-04-13T14:59:03.742495+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "viewer_count": 1768,
+            "sampled_at": "2026-04-13T15:00:04.413672+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "viewer_count": 1768,
+            "sampled_at": "2026-04-13T15:01:05.597240+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "viewer_count": 1719,
+            "sampled_at": "2026-04-13T15:02:08.034555+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "viewer_count": 1719,
+            "sampled_at": "2026-04-13T15:03:09.157585+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "viewer_count": 1690,
+            "sampled_at": "2026-04-13T15:04:10.037388+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "viewer_count": 1690,
+            "sampled_at": "2026-04-13T15:05:10.716402+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "viewer_count": 1690,
+            "sampled_at": "2026-04-13T15:06:11.749214+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "viewer_count": 1690,
+            "sampled_at": "2026-04-13T15:07:12.580183+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "viewer_count": 1708,
+            "sampled_at": "2026-04-13T15:08:13.473843+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "viewer_count": 1728,
+            "sampled_at": "2026-04-13T15:09:14.158856+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "viewer_count": 1728,
+            "sampled_at": "2026-04-13T15:10:14.990407+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "viewer_count": 1728,
+            "sampled_at": "2026-04-13T15:11:15.875229+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "viewer_count": 1728,
+            "sampled_at": "2026-04-13T15:12:17.583626+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "viewer_count": 1755,
+            "sampled_at": "2026-04-13T15:13:18.381771+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "viewer_count": 1835,
+            "sampled_at": "2026-04-13T15:14:19.058745+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "viewer_count": 1835,
+            "sampled_at": "2026-04-13T15:15:19.720329+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "viewer_count": 1813,
+            "sampled_at": "2026-04-13T15:16:20.404819+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "viewer_count": 1813,
+            "sampled_at": "2026-04-13T15:17:21.219245+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "viewer_count": 1813,
+            "sampled_at": "2026-04-13T15:18:21.925437+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "viewer_count": 1793,
+            "sampled_at": "2026-04-13T15:19:22.597052+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "viewer_count": 1768,
+            "sampled_at": "2026-04-13T15:20:23.365852+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "viewer_count": 1745,
+            "sampled_at": "2026-04-13T15:21:24.030478+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "viewer_count": 1773,
+            "sampled_at": "2026-04-13T15:22:24.714633+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "viewer_count": 1741,
+            "sampled_at": "2026-04-13T15:23:25.394612+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "viewer_count": 1741,
+            "sampled_at": "2026-04-13T15:24:26.065921+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "viewer_count": 1627,
+            "sampled_at": "2026-04-13T15:25:26.723388+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "viewer_count": 1651,
+            "sampled_at": "2026-04-13T15:26:27.540744+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "viewer_count": 1618,
+            "sampled_at": "2026-04-13T15:27:28.224427+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "viewer_count": 1594,
+            "sampled_at": "2026-04-13T15:28:28.904569+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "viewer_count": 1594,
+            "sampled_at": "2026-04-13T15:29:29.798582+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "viewer_count": 1559,
+            "sampled_at": "2026-04-13T15:30:30.463139+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "viewer_count": 1559,
+            "sampled_at": "2026-04-13T15:31:31.136674+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "viewer_count": 1566,
+            "sampled_at": "2026-04-13T15:32:31.958681+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "viewer_count": 1566,
+            "sampled_at": "2026-04-13T15:33:32.744775+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "viewer_count": 1518,
+            "sampled_at": "2026-04-13T15:34:33.593470+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "viewer_count": 1518,
+            "sampled_at": "2026-04-13T15:35:34.299918+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "viewer_count": 1539,
+            "sampled_at": "2026-04-13T15:36:35.028144+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "viewer_count": 1539,
+            "sampled_at": "2026-04-13T15:37:35.898250+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "viewer_count": 1539,
+            "sampled_at": "2026-04-13T15:38:36.585131+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "viewer_count": 1539,
+            "sampled_at": "2026-04-13T15:39:37.305411+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "viewer_count": 1539,
+            "sampled_at": "2026-04-13T15:40:38.032073+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "viewer_count": 1534,
+            "sampled_at": "2026-04-13T15:41:38.717762+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "viewer_count": 1534,
+            "sampled_at": "2026-04-13T15:42:39.444868+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "viewer_count": 1515,
+            "sampled_at": "2026-04-13T15:43:40.144225+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "viewer_count": 1489,
+            "sampled_at": "2026-04-13T15:44:40.892027+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "viewer_count": 1511,
+            "sampled_at": "2026-04-13T15:45:41.612045+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "viewer_count": 1489,
+            "sampled_at": "2026-04-13T15:46:42.345996+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "viewer_count": 1489,
+            "sampled_at": "2026-04-13T15:47:43.044232+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "viewer_count": 1489,
+            "sampled_at": "2026-04-13T15:48:43.758922+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "viewer_count": 1472,
+            "sampled_at": "2026-04-13T15:49:44.874748+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "viewer_count": 1523,
+            "sampled_at": "2026-04-13T15:50:45.588094+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "viewer_count": 1506,
+            "sampled_at": "2026-04-13T15:51:46.489264+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "viewer_count": 1492,
+            "sampled_at": "2026-04-13T15:52:47.195079+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "viewer_count": 1487,
+            "sampled_at": "2026-04-13T15:53:48.030412+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "viewer_count": 1487,
+            "sampled_at": "2026-04-13T15:54:48.878496+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "viewer_count": 1501,
+            "sampled_at": "2026-04-13T15:55:49.862733+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "viewer_count": 1479,
+            "sampled_at": "2026-04-13T15:56:50.582430+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "viewer_count": 1509,
+            "sampled_at": "2026-04-13T15:57:51.273452+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "viewer_count": 1509,
+            "sampled_at": "2026-04-13T15:58:51.995197+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "viewer_count": 1534,
+            "sampled_at": "2026-04-13T15:59:52.680591+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "viewer_count": 1510,
+            "sampled_at": "2026-04-13T16:00:53.400725+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "viewer_count": 1488,
+            "sampled_at": "2026-04-13T16:01:54.120486+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "viewer_count": 1488,
+            "sampled_at": "2026-04-13T16:02:54.980067+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "viewer_count": 1499,
+            "sampled_at": "2026-04-13T16:03:55.810966+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "viewer_count": 1519,
+            "sampled_at": "2026-04-13T16:04:56.496370+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "viewer_count": 1519,
+            "sampled_at": "2026-04-13T16:05:57.216658+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "viewer_count": 1493,
+            "sampled_at": "2026-04-13T16:06:57.929747+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "viewer_count": 1493,
+            "sampled_at": "2026-04-13T16:07:58.643236+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "viewer_count": 1493,
+            "sampled_at": "2026-04-13T16:08:59.363184+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "viewer_count": 1493,
+            "sampled_at": "2026-04-13T16:10:00.073514+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "viewer_count": 1477,
+            "sampled_at": "2026-04-13T16:11:00.782379+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "viewer_count": 1477,
+            "sampled_at": "2026-04-13T16:12:01.474936+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "viewer_count": 1520,
+            "sampled_at": "2026-04-13T16:13:02.160229+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "viewer_count": 1476,
+            "sampled_at": "2026-04-13T16:14:03.030703+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "viewer_count": 1413,
+            "sampled_at": "2026-04-13T16:15:03.920370+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "viewer_count": 1449,
+            "sampled_at": "2026-04-13T16:16:04.724613+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "viewer_count": 1492,
+            "sampled_at": "2026-04-13T16:17:05.686851+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "viewer_count": 1421,
+            "sampled_at": "2026-04-13T16:18:06.574522+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "viewer_count": 1421,
+            "sampled_at": "2026-04-13T16:19:07.287089+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "viewer_count": 1401,
+            "sampled_at": "2026-04-13T16:20:08.118052+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "viewer_count": 1401,
+            "sampled_at": "2026-04-13T16:21:08.942408+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "viewer_count": 1401,
+            "sampled_at": "2026-04-13T16:22:09.961063+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "viewer_count": 1381,
+            "sampled_at": "2026-04-13T16:23:10.799271+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "viewer_count": 1381,
+            "sampled_at": "2026-04-13T16:24:12.929418+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "viewer_count": 1399,
+            "sampled_at": "2026-04-13T16:25:13.754022+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "viewer_count": 1374,
+            "sampled_at": "2026-04-13T16:26:14.640461+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "viewer_count": 1360,
+            "sampled_at": "2026-04-13T16:27:15.169132+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "viewer_count": 1360,
+            "sampled_at": "2026-04-13T16:28:16.216649+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "viewer_count": 1345,
+            "sampled_at": "2026-04-13T16:29:17.419149+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "viewer_count": 1370,
+            "sampled_at": "2026-04-13T16:30:18.098207+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "viewer_count": 1343,
+            "sampled_at": "2026-04-13T16:31:18.901258+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "viewer_count": 1343,
+            "sampled_at": "2026-04-13T16:32:19.569315+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "viewer_count": 1325,
+            "sampled_at": "2026-04-13T16:33:20.230409+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "viewer_count": 1340,
+            "sampled_at": "2026-04-13T16:34:20.943490+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "viewer_count": 1413,
+            "sampled_at": "2026-04-13T16:35:21.608216+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "viewer_count": 1352,
+            "sampled_at": "2026-04-13T16:36:22.265609+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "viewer_count": 1330,
+            "sampled_at": "2026-04-13T16:37:22.932872+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "viewer_count": 1330,
+            "sampled_at": "2026-04-13T16:38:23.615677+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "viewer_count": 1330,
+            "sampled_at": "2026-04-13T16:39:24.294689+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "viewer_count": 1330,
+            "sampled_at": "2026-04-13T16:40:24.986593+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "viewer_count": 1360,
+            "sampled_at": "2026-04-13T16:41:25.651036+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "viewer_count": 1360,
+            "sampled_at": "2026-04-13T16:42:26.329703+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "viewer_count": 1319,
+            "sampled_at": "2026-04-13T16:43:26.987466+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "viewer_count": 1338,
+            "sampled_at": "2026-04-13T16:44:27.985594+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "viewer_count": 1338,
+            "sampled_at": "2026-04-13T16:45:28.677678+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "viewer_count": 1348,
+            "sampled_at": "2026-04-13T16:46:29.366120+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "viewer_count": 1303,
+            "sampled_at": "2026-04-13T16:47:30.055516+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "viewer_count": 1333,
+            "sampled_at": "2026-04-13T16:48:30.747779+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "viewer_count": 1333,
+            "sampled_at": "2026-04-13T16:49:31.440723+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "viewer_count": 1305,
+            "sampled_at": "2026-04-13T16:50:32.250391+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "viewer_count": 1289,
+            "sampled_at": "2026-04-13T16:51:32.928650+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "viewer_count": 1289,
+            "sampled_at": "2026-04-13T16:52:33.586453+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "viewer_count": 1266,
+            "sampled_at": "2026-04-13T16:53:34.439332+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "viewer_count": 1266,
+            "sampled_at": "2026-04-13T16:54:36.231356+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "viewer_count": 1235,
+            "sampled_at": "2026-04-13T16:55:36.893132+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "viewer_count": 1251,
+            "sampled_at": "2026-04-13T16:56:37.557597+00:00",
+            "source": "sampling.loop"
+          }
+        ],
+        "follower_samples": [
+          {
+            "followers_total": 79596,
+            "sampled_at": "2026-04-13T11:29:31.648273+00:00",
+            "source": "stream.online"
+          },
+          {
+            "followers_total": 79596,
+            "sampled_at": "2026-04-13T11:30:31.866724+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "followers_total": 79596,
+            "sampled_at": "2026-04-13T11:31:32.530828+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "followers_total": 79596,
+            "sampled_at": "2026-04-13T11:32:33.014456+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "followers_total": 79596,
+            "sampled_at": "2026-04-13T11:33:33.685945+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "followers_total": 79596,
+            "sampled_at": "2026-04-13T11:34:34.343440+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "followers_total": 79596,
+            "sampled_at": "2026-04-13T11:35:35.029307+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "followers_total": 79597,
+            "sampled_at": "2026-04-13T11:36:35.492536+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "followers_total": 79597,
+            "sampled_at": "2026-04-13T11:37:36.176968+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "followers_total": 79597,
+            "sampled_at": "2026-04-13T11:38:36.841411+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "followers_total": 79597,
+            "sampled_at": "2026-04-13T11:39:37.512664+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "followers_total": 79597,
+            "sampled_at": "2026-04-13T11:40:38.219290+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "followers_total": 79597,
+            "sampled_at": "2026-04-13T11:41:38.883412+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "followers_total": 79597,
+            "sampled_at": "2026-04-13T11:42:39.554584+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "followers_total": 79597,
+            "sampled_at": "2026-04-13T11:43:40.253800+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "followers_total": 79597,
+            "sampled_at": "2026-04-13T11:44:40.898330+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "followers_total": 79597,
+            "sampled_at": "2026-04-13T11:45:41.561784+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "followers_total": 79597,
+            "sampled_at": "2026-04-13T11:46:42.226598+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "followers_total": 79597,
+            "sampled_at": "2026-04-13T11:47:42.918680+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "followers_total": 79597,
+            "sampled_at": "2026-04-13T11:48:43.604140+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "followers_total": 79597,
+            "sampled_at": "2026-04-13T11:49:44.282226+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "followers_total": 79598,
+            "sampled_at": "2026-04-13T11:50:44.953888+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "followers_total": 79598,
+            "sampled_at": "2026-04-13T11:51:45.736420+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "followers_total": 79597,
+            "sampled_at": "2026-04-13T11:52:46.205470+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "followers_total": 79598,
+            "sampled_at": "2026-04-13T11:53:46.872212+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "followers_total": 79598,
+            "sampled_at": "2026-04-13T11:54:47.702374+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "followers_total": 79600,
+            "sampled_at": "2026-04-13T11:55:48.341051+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "followers_total": 79600,
+            "sampled_at": "2026-04-13T11:56:49.141960+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "followers_total": 79600,
+            "sampled_at": "2026-04-13T11:57:49.813509+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "followers_total": 79601,
+            "sampled_at": "2026-04-13T11:58:50.513074+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "followers_total": 79603,
+            "sampled_at": "2026-04-13T11:59:51.198153+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "followers_total": 79603,
+            "sampled_at": "2026-04-13T12:00:51.966410+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "followers_total": 79603,
+            "sampled_at": "2026-04-13T12:01:52.617069+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "followers_total": 79603,
+            "sampled_at": "2026-04-13T12:02:53.496993+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "followers_total": 79603,
+            "sampled_at": "2026-04-13T12:03:54.147590+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "followers_total": 79603,
+            "sampled_at": "2026-04-13T12:04:54.804925+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "followers_total": 79603,
+            "sampled_at": "2026-04-13T12:05:55.462648+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "followers_total": 79603,
+            "sampled_at": "2026-04-13T12:06:56.120161+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "followers_total": 79603,
+            "sampled_at": "2026-04-13T12:07:56.916621+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "followers_total": 79603,
+            "sampled_at": "2026-04-13T12:08:57.560457+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "followers_total": 79603,
+            "sampled_at": "2026-04-13T12:09:58.287524+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "followers_total": 79603,
+            "sampled_at": "2026-04-13T12:10:59.986935+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "followers_total": 79604,
+            "sampled_at": "2026-04-13T12:12:00.880974+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "followers_total": 79604,
+            "sampled_at": "2026-04-13T12:13:01.684812+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "followers_total": 79604,
+            "sampled_at": "2026-04-13T12:14:02.334470+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "followers_total": 79604,
+            "sampled_at": "2026-04-13T12:15:02.992397+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "followers_total": 79604,
+            "sampled_at": "2026-04-13T12:16:03.687894+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "followers_total": 79604,
+            "sampled_at": "2026-04-13T12:17:04.348903+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "followers_total": 79604,
+            "sampled_at": "2026-04-13T12:18:05.006598+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "followers_total": 79604,
+            "sampled_at": "2026-04-13T12:19:05.678393+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "followers_total": 79603,
+            "sampled_at": "2026-04-13T12:20:06.335418+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "followers_total": 79603,
+            "sampled_at": "2026-04-13T12:21:07.014083+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "followers_total": 79603,
+            "sampled_at": "2026-04-13T12:22:07.768654+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "followers_total": 79603,
+            "sampled_at": "2026-04-13T12:23:08.426013+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "followers_total": 79602,
+            "sampled_at": "2026-04-13T12:24:09.208838+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "followers_total": 79603,
+            "sampled_at": "2026-04-13T12:25:10.026463+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "followers_total": 79603,
+            "sampled_at": "2026-04-13T12:26:10.878676+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "followers_total": 79604,
+            "sampled_at": "2026-04-13T12:27:11.536162+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "followers_total": 79604,
+            "sampled_at": "2026-04-13T12:28:12.401813+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "followers_total": 79604,
+            "sampled_at": "2026-04-13T12:29:13.107668+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "followers_total": 79604,
+            "sampled_at": "2026-04-13T12:30:13.760264+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "followers_total": 79604,
+            "sampled_at": "2026-04-13T12:31:14.415958+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "followers_total": 79604,
+            "sampled_at": "2026-04-13T12:32:15.073488+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "followers_total": 79604,
+            "sampled_at": "2026-04-13T12:33:15.717580+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "followers_total": 79604,
+            "sampled_at": "2026-04-13T12:34:16.375190+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "followers_total": 79604,
+            "sampled_at": "2026-04-13T12:35:17.032379+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "followers_total": 79604,
+            "sampled_at": "2026-04-13T12:36:17.704064+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "followers_total": 79604,
+            "sampled_at": "2026-04-13T12:37:18.375516+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "followers_total": 79605,
+            "sampled_at": "2026-04-13T12:38:19.026140+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "followers_total": 79607,
+            "sampled_at": "2026-04-13T12:39:19.822529+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "followers_total": 79607,
+            "sampled_at": "2026-04-13T12:40:20.605359+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "followers_total": 79607,
+            "sampled_at": "2026-04-13T12:41:21.262742+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "followers_total": 79608,
+            "sampled_at": "2026-04-13T12:42:21.929287+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "followers_total": 79608,
+            "sampled_at": "2026-04-13T12:43:22.737643+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "followers_total": 79608,
+            "sampled_at": "2026-04-13T12:44:23.409353+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "followers_total": 79608,
+            "sampled_at": "2026-04-13T12:45:24.059821+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "followers_total": 79608,
+            "sampled_at": "2026-04-13T12:46:24.849783+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "followers_total": 79608,
+            "sampled_at": "2026-04-13T12:47:25.514707+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "followers_total": 79608,
+            "sampled_at": "2026-04-13T12:48:26.185348+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "followers_total": 79608,
+            "sampled_at": "2026-04-13T12:49:26.873230+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "followers_total": 79608,
+            "sampled_at": "2026-04-13T12:50:27.695443+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "followers_total": 79608,
+            "sampled_at": "2026-04-13T12:51:28.609825+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "followers_total": 79609,
+            "sampled_at": "2026-04-13T12:52:29.461804+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "followers_total": 79614,
+            "sampled_at": "2026-04-13T12:53:30.265274+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "followers_total": 79614,
+            "sampled_at": "2026-04-13T12:54:31.109993+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "followers_total": 79614,
+            "sampled_at": "2026-04-13T12:55:31.795740+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "followers_total": 79616,
+            "sampled_at": "2026-04-13T12:56:32.488286+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "followers_total": 79617,
+            "sampled_at": "2026-04-13T12:57:33.388989+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "followers_total": 79617,
+            "sampled_at": "2026-04-13T12:58:34.241583+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "followers_total": 79617,
+            "sampled_at": "2026-04-13T12:59:34.975023+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "followers_total": 79618,
+            "sampled_at": "2026-04-13T13:00:35.694970+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "followers_total": 79617,
+            "sampled_at": "2026-04-13T13:01:36.415760+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "followers_total": 79617,
+            "sampled_at": "2026-04-13T13:02:37.100619+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "followers_total": 79618,
+            "sampled_at": "2026-04-13T13:03:37.806910+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "followers_total": 79618,
+            "sampled_at": "2026-04-13T13:04:38.500232+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "followers_total": 79618,
+            "sampled_at": "2026-04-13T13:05:39.191507+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "followers_total": 79619,
+            "sampled_at": "2026-04-13T13:06:39.925620+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "followers_total": 79620,
+            "sampled_at": "2026-04-13T13:07:40.757575+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "followers_total": 79620,
+            "sampled_at": "2026-04-13T13:08:41.601847+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "followers_total": 79619,
+            "sampled_at": "2026-04-13T13:09:42.310122+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "followers_total": 79619,
+            "sampled_at": "2026-04-13T13:10:43.021490+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "followers_total": 79619,
+            "sampled_at": "2026-04-13T13:11:43.984764+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "followers_total": 79620,
+            "sampled_at": "2026-04-13T13:12:44.676689+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "followers_total": 79622,
+            "sampled_at": "2026-04-13T13:13:45.514917+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "followers_total": 79622,
+            "sampled_at": "2026-04-13T13:14:46.415673+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "followers_total": 79623,
+            "sampled_at": "2026-04-13T13:15:47.129168+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "followers_total": 79623,
+            "sampled_at": "2026-04-13T13:16:47.978526+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "followers_total": 79623,
+            "sampled_at": "2026-04-13T13:17:48.696529+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "followers_total": 79625,
+            "sampled_at": "2026-04-13T13:18:49.380093+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "followers_total": 79626,
+            "sampled_at": "2026-04-13T13:19:50.197028+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "followers_total": 79626,
+            "sampled_at": "2026-04-13T13:20:51.042850+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "followers_total": 79626,
+            "sampled_at": "2026-04-13T13:21:51.741244+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "followers_total": 79628,
+            "sampled_at": "2026-04-13T13:22:52.239524+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "followers_total": 79628,
+            "sampled_at": "2026-04-13T13:23:52.883182+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "followers_total": 79628,
+            "sampled_at": "2026-04-13T13:24:53.582104+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "followers_total": 79628,
+            "sampled_at": "2026-04-13T13:25:54.101231+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "followers_total": 79629,
+            "sampled_at": "2026-04-13T13:26:54.952897+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "followers_total": 79629,
+            "sampled_at": "2026-04-13T13:27:55.624360+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "followers_total": 79629,
+            "sampled_at": "2026-04-13T13:28:56.337326+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "followers_total": 79629,
+            "sampled_at": "2026-04-13T13:29:57.064595+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "followers_total": 79629,
+            "sampled_at": "2026-04-13T13:30:57.756813+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "followers_total": 79628,
+            "sampled_at": "2026-04-13T13:31:58.511767+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "followers_total": 79628,
+            "sampled_at": "2026-04-13T13:32:59.391949+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "followers_total": 79627,
+            "sampled_at": "2026-04-13T13:34:00.215948+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "followers_total": 79627,
+            "sampled_at": "2026-04-13T13:35:01.026496+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "followers_total": 79627,
+            "sampled_at": "2026-04-13T13:36:01.746682+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "followers_total": 79629,
+            "sampled_at": "2026-04-13T13:37:02.459755+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "followers_total": 79628,
+            "sampled_at": "2026-04-13T13:38:03.291579+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "followers_total": 79628,
+            "sampled_at": "2026-04-13T13:39:04.136284+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "followers_total": 79629,
+            "sampled_at": "2026-04-13T13:40:04.835848+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "followers_total": 79629,
+            "sampled_at": "2026-04-13T13:41:05.993425+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "followers_total": 79629,
+            "sampled_at": "2026-04-13T13:42:06.758705+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "followers_total": 79630,
+            "sampled_at": "2026-04-13T13:43:07.454384+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "followers_total": 79630,
+            "sampled_at": "2026-04-13T13:44:08.278772+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "followers_total": 79631,
+            "sampled_at": "2026-04-13T13:45:08.991955+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "followers_total": 79632,
+            "sampled_at": "2026-04-13T13:46:09.711925+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "followers_total": 79632,
+            "sampled_at": "2026-04-13T13:47:10.453141+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "followers_total": 79632,
+            "sampled_at": "2026-04-13T13:48:11.159272+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "followers_total": 79632,
+            "sampled_at": "2026-04-13T13:49:11.887134+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "followers_total": 79632,
+            "sampled_at": "2026-04-13T13:50:12.586059+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "followers_total": 79631,
+            "sampled_at": "2026-04-13T13:51:13.326679+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "followers_total": 79632,
+            "sampled_at": "2026-04-13T13:52:14.171741+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "followers_total": 79632,
+            "sampled_at": "2026-04-13T13:53:15.030765+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "followers_total": 79632,
+            "sampled_at": "2026-04-13T13:54:15.704737+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "followers_total": 79632,
+            "sampled_at": "2026-04-13T13:55:16.399446+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "followers_total": 79632,
+            "sampled_at": "2026-04-13T13:56:17.093922+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "followers_total": 79633,
+            "sampled_at": "2026-04-13T13:57:17.779234+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "followers_total": 79633,
+            "sampled_at": "2026-04-13T13:58:18.631740+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "followers_total": 79634,
+            "sampled_at": "2026-04-13T13:59:19.367062+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "followers_total": 79635,
+            "sampled_at": "2026-04-13T14:00:20.217513+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "followers_total": 79638,
+            "sampled_at": "2026-04-13T14:01:21.090348+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "followers_total": 79639,
+            "sampled_at": "2026-04-13T14:02:21.959851+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "followers_total": 79639,
+            "sampled_at": "2026-04-13T14:03:22.808739+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "followers_total": 79639,
+            "sampled_at": "2026-04-13T14:04:23.542541+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "followers_total": 79639,
+            "sampled_at": "2026-04-13T14:05:24.249009+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "followers_total": 79639,
+            "sampled_at": "2026-04-13T14:06:25.239745+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "followers_total": 79639,
+            "sampled_at": "2026-04-13T14:07:25.932571+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "followers_total": 79640,
+            "sampled_at": "2026-04-13T14:08:26.654724+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "followers_total": 79639,
+            "sampled_at": "2026-04-13T14:09:27.525515+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "followers_total": 79640,
+            "sampled_at": "2026-04-13T14:10:28.238303+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "followers_total": 79640,
+            "sampled_at": "2026-04-13T14:11:29.062767+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "followers_total": 79641,
+            "sampled_at": "2026-04-13T14:12:29.810620+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "followers_total": 79641,
+            "sampled_at": "2026-04-13T14:13:30.607443+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "followers_total": 79641,
+            "sampled_at": "2026-04-13T14:14:31.285917+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "followers_total": 79642,
+            "sampled_at": "2026-04-13T14:15:31.944063+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "followers_total": 79642,
+            "sampled_at": "2026-04-13T14:16:32.748836+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "followers_total": 79643,
+            "sampled_at": "2026-04-13T14:17:33.418816+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "followers_total": 79643,
+            "sampled_at": "2026-04-13T14:18:34.249382+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "followers_total": 79644,
+            "sampled_at": "2026-04-13T14:19:34.929500+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "followers_total": 79644,
+            "sampled_at": "2026-04-13T14:20:36.696939+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "followers_total": 79643,
+            "sampled_at": "2026-04-13T14:21:37.535460+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "followers_total": 79643,
+            "sampled_at": "2026-04-13T14:22:38.373173+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "followers_total": 79644,
+            "sampled_at": "2026-04-13T14:23:39.058677+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "followers_total": 79644,
+            "sampled_at": "2026-04-13T14:24:39.869833+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "followers_total": 79644,
+            "sampled_at": "2026-04-13T14:25:40.556194+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "followers_total": 79645,
+            "sampled_at": "2026-04-13T14:26:41.227876+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "followers_total": 79646,
+            "sampled_at": "2026-04-13T14:27:41.897375+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "followers_total": 79646,
+            "sampled_at": "2026-04-13T14:28:42.555030+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "followers_total": 79646,
+            "sampled_at": "2026-04-13T14:29:43.198864+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "followers_total": 79646,
+            "sampled_at": "2026-04-13T14:30:43.859835+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "followers_total": 79646,
+            "sampled_at": "2026-04-13T14:31:44.548644+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "followers_total": 79648,
+            "sampled_at": "2026-04-13T14:32:45.213599+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "followers_total": 79648,
+            "sampled_at": "2026-04-13T14:33:46.028757+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "followers_total": 79648,
+            "sampled_at": "2026-04-13T14:34:46.820135+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "followers_total": 79648,
+            "sampled_at": "2026-04-13T14:35:47.477755+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "followers_total": 79648,
+            "sampled_at": "2026-04-13T14:36:48.163000+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "followers_total": 79650,
+            "sampled_at": "2026-04-13T14:37:48.834766+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "followers_total": 79651,
+            "sampled_at": "2026-04-13T14:38:49.652342+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "followers_total": 79651,
+            "sampled_at": "2026-04-13T14:39:50.316848+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "followers_total": 79651,
+            "sampled_at": "2026-04-13T14:40:50.779756+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "followers_total": 79651,
+            "sampled_at": "2026-04-13T14:41:51.444380+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "followers_total": 79651,
+            "sampled_at": "2026-04-13T14:42:52.123221+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "followers_total": 79652,
+            "sampled_at": "2026-04-13T14:43:52.780572+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "followers_total": 79653,
+            "sampled_at": "2026-04-13T14:44:53.576790+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "followers_total": 79653,
+            "sampled_at": "2026-04-13T14:45:54.401145+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "followers_total": 79653,
+            "sampled_at": "2026-04-13T14:46:55.044979+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "followers_total": 79653,
+            "sampled_at": "2026-04-13T14:47:55.709834+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "followers_total": 79653,
+            "sampled_at": "2026-04-13T14:48:56.380902+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "followers_total": 79653,
+            "sampled_at": "2026-04-13T14:49:57.059736+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "followers_total": 79653,
+            "sampled_at": "2026-04-13T14:50:57.724180+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "followers_total": 79654,
+            "sampled_at": "2026-04-13T14:51:58.402353+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "followers_total": 79653,
+            "sampled_at": "2026-04-13T14:52:59.243246+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "followers_total": 79653,
+            "sampled_at": "2026-04-13T14:54:00.043947+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "followers_total": 79654,
+            "sampled_at": "2026-04-13T14:55:00.722915+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "followers_total": 79654,
+            "sampled_at": "2026-04-13T14:56:01.401139+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "followers_total": 79654,
+            "sampled_at": "2026-04-13T14:57:02.225669+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "followers_total": 79654,
+            "sampled_at": "2026-04-13T14:58:03.035083+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "followers_total": 79654,
+            "sampled_at": "2026-04-13T14:59:03.742495+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "followers_total": 79654,
+            "sampled_at": "2026-04-13T15:00:04.413672+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "followers_total": 79654,
+            "sampled_at": "2026-04-13T15:01:05.597240+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "followers_total": 79655,
+            "sampled_at": "2026-04-13T15:02:08.034555+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "followers_total": 79655,
+            "sampled_at": "2026-04-13T15:03:09.157585+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "followers_total": 79655,
+            "sampled_at": "2026-04-13T15:04:10.037388+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "followers_total": 79655,
+            "sampled_at": "2026-04-13T15:05:10.716402+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "followers_total": 79657,
+            "sampled_at": "2026-04-13T15:06:11.749214+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "followers_total": 79657,
+            "sampled_at": "2026-04-13T15:07:12.580183+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "followers_total": 79657,
+            "sampled_at": "2026-04-13T15:08:13.473843+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "followers_total": 79658,
+            "sampled_at": "2026-04-13T15:09:14.158856+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "followers_total": 79659,
+            "sampled_at": "2026-04-13T15:10:14.990407+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "followers_total": 79659,
+            "sampled_at": "2026-04-13T15:11:15.875229+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "followers_total": 79659,
+            "sampled_at": "2026-04-13T15:12:17.583626+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "followers_total": 79659,
+            "sampled_at": "2026-04-13T15:13:18.381771+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "followers_total": 79659,
+            "sampled_at": "2026-04-13T15:14:19.058745+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "followers_total": 79659,
+            "sampled_at": "2026-04-13T15:15:19.720329+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "followers_total": 79660,
+            "sampled_at": "2026-04-13T15:16:20.404819+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "followers_total": 79662,
+            "sampled_at": "2026-04-13T15:17:21.219245+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "followers_total": 79662,
+            "sampled_at": "2026-04-13T15:18:21.925437+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "followers_total": 79662,
+            "sampled_at": "2026-04-13T15:19:22.597052+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "followers_total": 79662,
+            "sampled_at": "2026-04-13T15:20:23.365852+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "followers_total": 79662,
+            "sampled_at": "2026-04-13T15:21:24.030478+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "followers_total": 79662,
+            "sampled_at": "2026-04-13T15:22:24.714633+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "followers_total": 79662,
+            "sampled_at": "2026-04-13T15:23:25.394612+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "followers_total": 79662,
+            "sampled_at": "2026-04-13T15:24:26.065921+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "followers_total": 79661,
+            "sampled_at": "2026-04-13T15:25:26.723388+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "followers_total": 79661,
+            "sampled_at": "2026-04-13T15:26:27.540744+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "followers_total": 79662,
+            "sampled_at": "2026-04-13T15:27:28.224427+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "followers_total": 79663,
+            "sampled_at": "2026-04-13T15:28:28.904569+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "followers_total": 79664,
+            "sampled_at": "2026-04-13T15:29:29.798582+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "followers_total": 79664,
+            "sampled_at": "2026-04-13T15:30:30.463139+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "followers_total": 79665,
+            "sampled_at": "2026-04-13T15:31:31.136674+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "followers_total": 79665,
+            "sampled_at": "2026-04-13T15:32:31.958681+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "followers_total": 79666,
+            "sampled_at": "2026-04-13T15:33:32.744775+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "followers_total": 79666,
+            "sampled_at": "2026-04-13T15:34:33.593470+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "followers_total": 79666,
+            "sampled_at": "2026-04-13T15:35:34.299918+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "followers_total": 79667,
+            "sampled_at": "2026-04-13T15:36:35.028144+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "followers_total": 79667,
+            "sampled_at": "2026-04-13T15:37:35.898250+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "followers_total": 79667,
+            "sampled_at": "2026-04-13T15:38:36.585131+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "followers_total": 79667,
+            "sampled_at": "2026-04-13T15:39:37.305411+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "followers_total": 79667,
+            "sampled_at": "2026-04-13T15:40:38.032073+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "followers_total": 79667,
+            "sampled_at": "2026-04-13T15:41:38.717762+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "followers_total": 79667,
+            "sampled_at": "2026-04-13T15:42:39.444868+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "followers_total": 79667,
+            "sampled_at": "2026-04-13T15:43:40.144225+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "followers_total": 79667,
+            "sampled_at": "2026-04-13T15:44:40.892027+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "followers_total": 79667,
+            "sampled_at": "2026-04-13T15:45:41.612045+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "followers_total": 79667,
+            "sampled_at": "2026-04-13T15:46:42.345996+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "followers_total": 79667,
+            "sampled_at": "2026-04-13T15:47:43.044232+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "followers_total": 79668,
+            "sampled_at": "2026-04-13T15:48:43.758922+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "followers_total": 79668,
+            "sampled_at": "2026-04-13T15:49:44.874748+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "followers_total": 79670,
+            "sampled_at": "2026-04-13T15:50:45.588094+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "followers_total": 79670,
+            "sampled_at": "2026-04-13T15:51:46.489264+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "followers_total": 79671,
+            "sampled_at": "2026-04-13T15:52:47.195079+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "followers_total": 79671,
+            "sampled_at": "2026-04-13T15:53:48.030412+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "followers_total": 79672,
+            "sampled_at": "2026-04-13T15:54:48.878496+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "followers_total": 79672,
+            "sampled_at": "2026-04-13T15:55:49.862733+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "followers_total": 79672,
+            "sampled_at": "2026-04-13T15:56:50.582430+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "followers_total": 79672,
+            "sampled_at": "2026-04-13T15:57:51.273452+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "followers_total": 79672,
+            "sampled_at": "2026-04-13T15:58:51.995197+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "followers_total": 79672,
+            "sampled_at": "2026-04-13T15:59:52.680591+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "followers_total": 79672,
+            "sampled_at": "2026-04-13T16:00:53.400725+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "followers_total": 79671,
+            "sampled_at": "2026-04-13T16:01:54.120486+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "followers_total": 79670,
+            "sampled_at": "2026-04-13T16:02:54.980067+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "followers_total": 79670,
+            "sampled_at": "2026-04-13T16:03:55.810966+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "followers_total": 79670,
+            "sampled_at": "2026-04-13T16:04:56.496370+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "followers_total": 79670,
+            "sampled_at": "2026-04-13T16:05:57.216658+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "followers_total": 79670,
+            "sampled_at": "2026-04-13T16:06:57.929747+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "followers_total": 79670,
+            "sampled_at": "2026-04-13T16:07:58.643236+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "followers_total": 79670,
+            "sampled_at": "2026-04-13T16:08:59.363184+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "followers_total": 79670,
+            "sampled_at": "2026-04-13T16:10:00.073514+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "followers_total": 79670,
+            "sampled_at": "2026-04-13T16:11:00.782379+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "followers_total": 79670,
+            "sampled_at": "2026-04-13T16:12:01.474936+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "followers_total": 79670,
+            "sampled_at": "2026-04-13T16:13:02.160229+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "followers_total": 79670,
+            "sampled_at": "2026-04-13T16:14:03.030703+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "followers_total": 79672,
+            "sampled_at": "2026-04-13T16:15:03.920370+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "followers_total": 79672,
+            "sampled_at": "2026-04-13T16:16:04.724613+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "followers_total": 79673,
+            "sampled_at": "2026-04-13T16:17:05.686851+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "followers_total": 79675,
+            "sampled_at": "2026-04-13T16:18:06.574522+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "followers_total": 79676,
+            "sampled_at": "2026-04-13T16:19:07.287089+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "followers_total": 79674,
+            "sampled_at": "2026-04-13T16:20:08.118052+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "followers_total": 79675,
+            "sampled_at": "2026-04-13T16:21:08.942408+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "followers_total": 79675,
+            "sampled_at": "2026-04-13T16:22:09.961063+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "followers_total": 79677,
+            "sampled_at": "2026-04-13T16:23:10.799271+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "followers_total": 79676,
+            "sampled_at": "2026-04-13T16:24:12.929418+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "followers_total": 79676,
+            "sampled_at": "2026-04-13T16:25:13.754022+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "followers_total": 79676,
+            "sampled_at": "2026-04-13T16:26:14.640461+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "followers_total": 79677,
+            "sampled_at": "2026-04-13T16:27:15.169132+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "followers_total": 79677,
+            "sampled_at": "2026-04-13T16:28:16.216649+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "followers_total": 79677,
+            "sampled_at": "2026-04-13T16:29:17.419149+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "followers_total": 79678,
+            "sampled_at": "2026-04-13T16:30:18.098207+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "followers_total": 79678,
+            "sampled_at": "2026-04-13T16:31:18.901258+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "followers_total": 79678,
+            "sampled_at": "2026-04-13T16:32:19.569315+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "followers_total": 79677,
+            "sampled_at": "2026-04-13T16:33:20.230409+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "followers_total": 79677,
+            "sampled_at": "2026-04-13T16:34:20.943490+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "followers_total": 79678,
+            "sampled_at": "2026-04-13T16:35:21.608216+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "followers_total": 79678,
+            "sampled_at": "2026-04-13T16:36:22.265609+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "followers_total": 79678,
+            "sampled_at": "2026-04-13T16:37:22.932872+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "followers_total": 79678,
+            "sampled_at": "2026-04-13T16:38:23.615677+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "followers_total": 79678,
+            "sampled_at": "2026-04-13T16:39:24.294689+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "followers_total": 79678,
+            "sampled_at": "2026-04-13T16:40:24.986593+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "followers_total": 79680,
+            "sampled_at": "2026-04-13T16:41:25.651036+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "followers_total": 79680,
+            "sampled_at": "2026-04-13T16:42:26.329703+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "followers_total": 79680,
+            "sampled_at": "2026-04-13T16:43:26.987466+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "followers_total": 79680,
+            "sampled_at": "2026-04-13T16:44:27.985594+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "followers_total": 79680,
+            "sampled_at": "2026-04-13T16:45:28.677678+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "followers_total": 79680,
+            "sampled_at": "2026-04-13T16:46:29.366120+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "followers_total": 79680,
+            "sampled_at": "2026-04-13T16:47:30.055516+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "followers_total": 79680,
+            "sampled_at": "2026-04-13T16:48:30.747779+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "followers_total": 79682,
+            "sampled_at": "2026-04-13T16:49:31.440723+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "followers_total": 79682,
+            "sampled_at": "2026-04-13T16:50:32.250391+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "followers_total": 79682,
+            "sampled_at": "2026-04-13T16:51:32.928650+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "followers_total": 79683,
+            "sampled_at": "2026-04-13T16:52:33.586453+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "followers_total": 79683,
+            "sampled_at": "2026-04-13T16:53:34.439332+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "followers_total": 79683,
+            "sampled_at": "2026-04-13T16:54:36.231356+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "followers_total": 79683,
+            "sampled_at": "2026-04-13T16:55:36.893132+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "followers_total": 79685,
+            "sampled_at": "2026-04-13T16:56:37.557597+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "followers_total": 79686,
+            "sampled_at": "2026-04-13T16:56:59.834723+00:00",
+            "source": "stream.finalize"
+          }
+        ],
+        "follow_events": [],
+        "avg_viewers": 1482.29,
+        "max_viewers": 1958,
+        "followers_start": 79596,
+        "followers_end": 79686,
+        "followers_delta": 90,
+        "followers_delta_exact": 0
+      },
+      "collector": {
+        "created_at": "2026-04-13T11:29:31.642584+00:00",
+        "updated_at": "2026-04-13T16:57:00.502093+00:00",
+        "source": "eventsub.stream_online",
+        "completed_at": "2026-04-13T16:57:00.510709+00:00",
+        "completion_reason": "eventsub.stream_offline"
+      }
     }
   ]
 }
