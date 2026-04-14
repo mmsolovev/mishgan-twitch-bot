@@ -1,7 +1,10 @@
 import asyncio
+from collections import deque
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 import json
+import random
+from weakref import WeakKeyDictionary
 
 import aiohttp
 
@@ -14,9 +17,81 @@ IGDB_GAMES_URL = "https://api.igdb.com/v4/games"
 _STEAM_HOST_MARKERS = ("store.steampowered.com", "steamcommunity.com", "steam://")
 _PC_MARKERS = {"pc (microsoft windows)", "linux", "mac"}
 _PS_MARKERS = {"playstation 5", "playstation 4", "playstation 3", "playstation 2", "playstation"}
-_igdb_token: str | None = None
-_igdb_token_expires_at: datetime | None = None
-_igdb_token_lock = asyncio.Lock()
+
+# IGDB docs: 4 req/sec and up to 8 open requests. We enforce both locally to avoid 429 spikes.
+_IGDB_RATE_LIMIT_RPS = 4
+_IGDB_MAX_INFLIGHT = 8
+
+# Cache is intentionally short-ish: it protects IGDB from spam and speeds up repeated !рек.
+_META_CACHE_TTL_SECONDS = 60 * 60  # 1 hour
+_META_NEGATIVE_CACHE_TTL_SECONDS = 20  # "not found" cache
+
+
+class _SlidingWindowRateLimiter:
+    def __init__(self, *, max_calls: int, period_seconds: float):
+        self._max_calls = max(1, int(max_calls))
+        self._period = float(period_seconds)
+        self._calls: deque[float] = deque()
+        self._lock = asyncio.Lock()
+
+    async def acquire(self) -> None:
+        loop = asyncio.get_running_loop()
+        while True:
+            async with self._lock:
+                now = loop.time()
+                while self._calls and (now - self._calls[0]) >= self._period:
+                    self._calls.popleft()
+
+                if len(self._calls) < self._max_calls:
+                    self._calls.append(now)
+                    return
+
+                sleep_for = self._period - (now - self._calls[0])
+
+            if sleep_for > 0:
+                await asyncio.sleep(sleep_for)
+            else:
+                # Defensive: avoid a busy loop if clock math gets weird.
+                await asyncio.sleep(0)
+
+
+@dataclass
+class _IGDBCacheEntry:
+    value: "RecommendationMetadata | None"
+    expires_at: float  # loop.time()
+
+
+@dataclass
+class _IGDBLoopState:
+    token: str | None
+    token_expires_at: datetime | None
+    token_lock: asyncio.Lock
+    inflight: asyncio.Semaphore
+    rate: _SlidingWindowRateLimiter
+    meta_cache: dict[str, _IGDBCacheEntry]
+    meta_inflight: dict[str, asyncio.Task["RecommendationMetadata | None"]]
+
+
+_state_by_loop: "WeakKeyDictionary[asyncio.AbstractEventLoop, _IGDBLoopState]" = WeakKeyDictionary()
+
+
+def _get_state() -> _IGDBLoopState:
+    loop = asyncio.get_running_loop()
+    state = _state_by_loop.get(loop)
+    if state is not None:
+        return state
+
+    state = _IGDBLoopState(
+        token=None,
+        token_expires_at=None,
+        token_lock=asyncio.Lock(),
+        inflight=asyncio.Semaphore(_IGDB_MAX_INFLIGHT),
+        rate=_SlidingWindowRateLimiter(max_calls=_IGDB_RATE_LIMIT_RPS, period_seconds=1.0),
+        meta_cache={},
+        meta_inflight={},
+    )
+    _state_by_loop[loop] = state
+    return state
 
 
 @dataclass
@@ -150,47 +225,90 @@ async def _fetch_igdb_token(session: aiohttp.ClientSession) -> tuple[str | None,
         return None, None
 
 
-async def _get_igdb_token(session: aiohttp.ClientSession) -> str | None:
-    global _igdb_token, _igdb_token_expires_at
+async def _get_igdb_token(
+    state: _IGDBLoopState,
+    session: aiohttp.ClientSession,
+    *,
+    force_refresh: bool = False,
+) -> str | None:
+    if not force_refresh and state.token and state.token_expires_at and datetime.utcnow() < state.token_expires_at:
+        return state.token
 
-    if _igdb_token and _igdb_token_expires_at and datetime.utcnow() < _igdb_token_expires_at:
-        return _igdb_token
-
-    async with _igdb_token_lock:
-        if _igdb_token and _igdb_token_expires_at and datetime.utcnow() < _igdb_token_expires_at:
-            return _igdb_token
+    async with state.token_lock:
+        if not force_refresh and state.token and state.token_expires_at and datetime.utcnow() < state.token_expires_at:
+            return state.token
 
         token, expires_at = await _fetch_igdb_token(session)
         if not token or not expires_at:
             return None
 
-        _igdb_token = token
-        _igdb_token_expires_at = expires_at
-        return _igdb_token
+        state.token = token
+        state.token_expires_at = expires_at
+        return state.token
 
 
-async def _igdb_query(session: aiohttp.ClientSession, body: str) -> list[dict] | None:
-    token = await _get_igdb_token(session)
-    if not token or not IGDB_CLIENT_ID:
-        return None
+async def _igdb_query(state: _IGDBLoopState, session: aiohttp.ClientSession, body: str) -> list[dict] | None:
+    logger = get_logger("recommendations.metadata")
 
-    headers = {
-        "Client-ID": IGDB_CLIENT_ID,
-        "Authorization": f"Bearer {token}",
-        "Accept": "application/json",
-    }
+    # Retry strategy:
+    # - 401: refresh token once
+    # - 429 / 5xx / transient network: exponential backoff with jitter
+    max_attempts = 5
+    refreshed_token = False
 
-    try:
-        async with session.post(IGDB_GAMES_URL, headers=headers, data=body.encode("utf-8")) as response:
-            if response.status != 200:
-                logger = get_logger("recommendations.metadata")
-                logger.warning("IGDB query failed: %s", response.status)
-                return None
-            return await response.json()
-    except aiohttp.ClientError as exc:
-        logger = get_logger("recommendations.metadata")
-        logger.warning("IGDB query error: %s", exc)
-        return None
+    for attempt in range(1, max_attempts + 1):
+        token = await _get_igdb_token(state, session, force_refresh=refreshed_token)
+        if not token or not IGDB_CLIENT_ID:
+            return None
+
+        headers = {
+            "Client-ID": IGDB_CLIENT_ID,
+            "Authorization": f"Bearer {token}",
+            "Accept": "application/json",
+        }
+
+        await state.rate.acquire()
+        try:
+            async with state.inflight:
+                async with session.post(IGDB_GAMES_URL, headers=headers, data=body.encode("utf-8")) as response:
+                    if response.status == 200:
+                        return await response.json()
+
+                    if response.status == 401 and not refreshed_token:
+                        # Token might be expired/invalidated: refresh and retry once.
+                        refreshed_token = True
+                        continue
+
+                    if response.status in {429, 500, 502, 503, 504}:
+                        retry_after = response.headers.get("Retry-After")
+                        if retry_after:
+                            try:
+                                delay = max(0.0, float(retry_after))
+                            except ValueError:
+                                delay = 0.0
+                        else:
+                            delay = 0.25 * (2 ** (attempt - 1))
+                        delay = min(4.0, delay)
+                        delay = delay + random.uniform(0, 0.25)
+
+                        logger.warning("IGDB query failed (%s), retry in %.2fs (attempt %s/%s)",
+                                       response.status, delay, attempt, max_attempts)
+                        await asyncio.sleep(delay)
+                        continue
+
+                    logger.warning("IGDB query failed: %s", response.status)
+                    return None
+        except aiohttp.ClientError as exc:
+            delay = 0.25 * (2 ** (attempt - 1))
+            delay = min(4.0, delay) + random.uniform(0, 0.25)
+            logger.warning("IGDB query error: %s, retry in %.2fs (attempt %s/%s)", exc, delay, attempt, max_attempts)
+            await asyncio.sleep(delay)
+
+    return None
+
+
+def _cache_key(query: str) -> str:
+    return " ".join((query or "").casefold().split())
 
 
 def _pick_best_search_result(query: str, results: list[dict]) -> dict | None:
@@ -253,63 +371,87 @@ async def fetch_recommendation_metadata(query: str) -> RecommendationMetadata | 
         return None
 
     logger = get_logger("recommendations.metadata")
+    state = _get_state()
 
-    timeout = aiohttp.ClientTimeout(total=15)
-    async with aiohttp.ClientSession(timeout=timeout) as session:
-        body = (
-            "fields "
-            "id,name,slug,summary,first_release_date,"
-            "total_rating,total_rating_count,"
-            "aggregated_rating,aggregated_rating_count,"
-            "genres.name,platforms.name,"
-            "websites.url,cover.url,"
-            "category,version_parent,parent_game;"
-            f' search "{search_query.replace(chr(34), "")}";'
-            " limit 20;"
-        )
-        results = await _igdb_query(session, body)
-        if not results:
-            return None
+    key = _cache_key(search_query)
+    now = asyncio.get_running_loop().time()
+    cached = state.meta_cache.get(key)
+    if cached is not None and now < cached.expires_at:
+        return cached.value
 
-        best_match = _pick_best_search_result(search_query, results)
-        if not best_match:
-            return None
+    inflight = state.meta_inflight.get(key)
+    if inflight is not None:
+        return await inflight
 
-        game_id = best_match.get("id")
-        if not game_id:
-            logger.warning("IGDB result missing id for query '%s'", search_query)
-            return None
+    async def _do_fetch() -> RecommendationMetadata | None:
+        timeout = aiohttp.ClientTimeout(total=15)
+        async with aiohttp.ClientSession(timeout=timeout) as session:
+            body = (
+                "fields "
+                "id,name,slug,summary,first_release_date,"
+                "total_rating,total_rating_count,"
+                "aggregated_rating,aggregated_rating_count,"
+                "genres.name,platforms.name,"
+                "websites.url,cover.url,"
+                "category,version_parent,parent_game;"
+                f' search "{search_query.replace(chr(34), "")}";'
+                " limit 20;"
+            )
+            results = await _igdb_query(state, session, body)
+            if not results:
+                return None
 
-        release_date, release_precision = _parse_release_date(best_match.get("first_release_date"))
-        websites = best_match.get("websites") or []
-        steam_url = None
-        for website in websites:
-            url = (website.get("url") or "").strip()
-            if any(marker in url.casefold() for marker in _STEAM_HOST_MARKERS):
-                steam_url = url
-                break
+            best_match = _pick_best_search_result(search_query, results)
+            if not best_match:
+                return None
 
-        cover = best_match.get("cover") or {}
-        cover_url = (cover.get("url") or "").strip()
-        if cover_url.startswith("//"):
-            cover_url = f"https:{cover_url}"
-        elif cover_url.startswith("/"):
-            cover_url = f"https://images.igdb.com{cover_url}"
+            game_id = best_match.get("id")
+            if not game_id:
+                logger.warning("IGDB result missing id for query '%s'", search_query)
+                return None
 
-        return RecommendationMetadata(
-            title=best_match.get("name") or search_query,
-            description_short=None,
-            release_date=release_date,
-            release_precision=release_precision,
-            steam_url=steam_url,
-            rating_text=_build_rating_text(best_match),
-            platforms_text=_build_platforms_text(best_match.get("platforms")),
-            genres_text=_join_names(best_match.get("genres")),
-            cover_url=cover_url or None,
-            source_name="igdb",
-            source_game_id=str(game_id),
-            source_payload=json.dumps(best_match, ensure_ascii=False),
-        )
+            release_date, release_precision = _parse_release_date(best_match.get("first_release_date"))
+            websites = best_match.get("websites") or []
+            steam_url = None
+            for website in websites:
+                url = (website.get("url") or "").strip()
+                if any(marker in url.casefold() for marker in _STEAM_HOST_MARKERS):
+                    steam_url = url
+                    break
+
+            cover = best_match.get("cover") or {}
+            cover_url = (cover.get("url") or "").strip()
+            if cover_url.startswith("//"):
+                cover_url = f"https:{cover_url}"
+            elif cover_url.startswith("/"):
+                cover_url = f"https://images.igdb.com{cover_url}"
+
+            return RecommendationMetadata(
+                title=best_match.get("name") or search_query,
+                description_short=None,
+                release_date=release_date,
+                release_precision=release_precision,
+                steam_url=steam_url,
+                rating_text=_build_rating_text(best_match),
+                platforms_text=_build_platforms_text(best_match.get("platforms")),
+                genres_text=_join_names(best_match.get("genres")),
+                cover_url=cover_url or None,
+                source_name="igdb",
+                source_game_id=str(game_id),
+                source_payload=json.dumps(best_match, ensure_ascii=False),
+            )
+
+    task = asyncio.create_task(_do_fetch())
+    state.meta_inflight[key] = task
+    try:
+        result = await task
+    finally:
+        state.meta_inflight.pop(key, None)
+
+    ttl = _META_CACHE_TTL_SECONDS if result is not None else _META_NEGATIVE_CACHE_TTL_SECONDS
+    now = asyncio.get_running_loop().time()
+    state.meta_cache[key] = _IGDBCacheEntry(value=result, expires_at=now + ttl)
+    return result
 
 
 async def fetch_top_upcoming_games(limit: int = 15) -> list[RecommendationMetadata]:
@@ -319,6 +461,7 @@ async def fetch_top_upcoming_games(limit: int = 15) -> list[RecommendationMetada
     month_later = now + 30 * 24 * 60 * 60
 
     logger = get_logger("recommendations.metadata")
+    state = _get_state()
 
     timeout = aiohttp.ClientTimeout(total=15)
 
@@ -340,7 +483,7 @@ async def fetch_top_upcoming_games(limit: int = 15) -> list[RecommendationMetada
         limit 50;
         """
 
-        results = await _igdb_query(session, body)
+        results = await _igdb_query(state, session, body)
 
         if not results:
             return []

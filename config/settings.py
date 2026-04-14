@@ -21,7 +21,7 @@ BOT_PREFIX = "!"
 SIGN="MrDestructoid"
 COOLDOWN = 60
 ADMINS = ["mishgan_sol", "tabula", "orfeylefontu"]
-ALLOWED_USERS = {"mishgan_sol", "tabula", "orfeylefontu", "wraith8", "kampacha", "angrys2l"}
+ALLOWED_USERS = {"mishgan_sol", "tabula", "orfeylefontu", "eternalchilll", "wraith8", "kampacha", "angrys2l"}
 RECOMMENDATIONS_LIMIT = int(os.getenv("RECOMMENDATIONS_LIMIT", "5"))
 RECOMMENDATIONS_BANNED_USERS = {
     user.strip().casefold()
