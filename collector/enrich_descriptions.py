@@ -16,7 +16,7 @@ def generate_short_description_sync(text: str) -> str | None:
                     "role": "system",
                     "content": (
                         "Переведи и кратко перескажи описание игры на русском языке. "
-                        "Максимум 235 символов. Без лишней воды."
+                        "Максимум 170 символов. Без лишней воды."
                     ),
                 },
                 {"role": "user", "content": text},

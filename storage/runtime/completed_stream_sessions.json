@@ -9389,6 +9389,174 @@
         "completed_at": "2026-04-13T16:57:00.510709+00:00",
         "completion_reason": "eventsub.stream_offline"
       }
+    },
+    {
+      "version": 2,
+      "status": "completed",
+      "channel_login": "tabula",
+      "broadcaster_id": "600513126",
+      "stream_id": "315812124885",
+      "started_at": "2026-04-14T08:42:14+00:00",
+      "ended_at": "2026-04-14T08:51:19.022433+00:00",
+      "duration_minutes": 9.08,
+      "title": "DLC ATOMIC HEART #3",
+      "category_name": "Just Chatting",
+      "category_id": "509658",
+      "title_history": [
+        {
+          "title": "DLC ATOMIC HEART #3",
+          "changed_at": "2026-04-14T08:42:14+00:00",
+          "source": "eventsub.stream_online"
+        }
+      ],
+      "category_history": [
+        {
+          "category_id": "509658",
+          "category_name": "Just Chatting",
+          "changed_at": "2026-04-14T08:42:14+00:00",
+          "source": "eventsub.stream_online"
+        }
+      ],
+      "game_segments": [
+        {
+          "category_id": "509658",
+          "category_name": "Just Chatting",
+          "started_at": "2026-04-14T08:42:14+00:00",
+          "ended_at": "2026-04-14T08:51:19.022433+00:00",
+          "source": "eventsub.stream_online",
+          "followers_gained": 0,
+          "followers_per_hour": 0.0
+        }
+      ],
+      "events": [
+        {
+          "type": "stream.session_started",
+          "timestamp": "2026-04-14T08:42:26.749169+00:00",
+          "payload": {
+            "stream_id": "315812124885",
+            "started_at": "2026-04-14T08:42:14+00:00",
+            "title": "DLC ATOMIC HEART #3",
+            "category_name": "Just Chatting",
+            "source": "eventsub.stream_online"
+          }
+        }
+      ],
+      "metrics": {
+        "sample_interval_seconds": 60,
+        "viewer_samples": [
+          {
+            "viewer_count": 0,
+            "sampled_at": "2026-04-14T08:42:26.750195+00:00",
+            "source": "stream.online"
+          },
+          {
+            "viewer_count": 7,
+            "sampled_at": "2026-04-14T08:43:26.967056+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "viewer_count": 7,
+            "sampled_at": "2026-04-14T08:44:27.617374+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "viewer_count": 7,
+            "sampled_at": "2026-04-14T08:45:28.248072+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "viewer_count": 7,
+            "sampled_at": "2026-04-14T08:46:28.869628+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "viewer_count": 206,
+            "sampled_at": "2026-04-14T08:47:29.686547+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "viewer_count": 206,
+            "sampled_at": "2026-04-14T08:48:30.336876+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "viewer_count": 206,
+            "sampled_at": "2026-04-14T08:49:30.807270+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "viewer_count": 206,
+            "sampled_at": "2026-04-14T08:50:31.450455+00:00",
+            "source": "sampling.loop"
+          }
+        ],
+        "follower_samples": [
+          {
+            "followers_total": 79685,
+            "sampled_at": "2026-04-14T08:42:26.750195+00:00",
+            "source": "stream.online"
+          },
+          {
+            "followers_total": 79685,
+            "sampled_at": "2026-04-14T08:43:26.967056+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "followers_total": 79685,
+            "sampled_at": "2026-04-14T08:44:27.617374+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "followers_total": 79685,
+            "sampled_at": "2026-04-14T08:45:28.248072+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "followers_total": 79684,
+            "sampled_at": "2026-04-14T08:46:28.869628+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "followers_total": 79684,
+            "sampled_at": "2026-04-14T08:47:29.686547+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "followers_total": 79684,
+            "sampled_at": "2026-04-14T08:48:30.336876+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "followers_total": 79684,
+            "sampled_at": "2026-04-14T08:49:30.807270+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "followers_total": 79684,
+            "sampled_at": "2026-04-14T08:50:31.450455+00:00",
+            "source": "sampling.loop"
+          },
+          {
+            "followers_total": 79684,
+            "sampled_at": "2026-04-14T08:51:19.022656+00:00",
+            "source": "stream.finalize"
+          }
+        ],
+        "follow_events": [],
+        "avg_viewers": 94.67,
+        "max_viewers": 206,
+        "followers_start": 79685,
+        "followers_end": 79684,
+        "followers_delta": -1,
+        "followers_delta_exact": 0
+      },
+      "collector": {
+        "created_at": "2026-04-14T08:42:26.749160+00:00",
+        "updated_at": "2026-04-14T08:51:19.495426+00:00",
+        "source": "eventsub.stream_online",
+        "completed_at": "2026-04-14T08:51:19.512474+00:00",
+        "completion_reason": "eventsub.stream_offline"
+      }
     }
   ]
 }

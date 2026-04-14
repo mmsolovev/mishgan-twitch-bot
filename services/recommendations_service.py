@@ -53,6 +53,21 @@ class RecommendationActionResult:
     accepted: bool = False
 
 
+def _has_special_source(recommendation):
+    for vote in recommendation.votes:
+        login = (vote.user_login or "").casefold()
+        if login in {"tabula", "igdb"}:
+            return True
+    return False
+
+
+def _is_igdb(recommendation):
+    return any(
+        (vote.user_login or "").casefold() == "igdb"
+        for vote in recommendation.votes
+    )
+
+
 def _normalize_user_login(value: str) -> str:
     return " ".join((value or "").casefold().split())
 
@@ -176,11 +191,6 @@ def determine_recommendation_status(
     matched_game: Game | None = None,
     streamer_interested: bool = False,
 ) -> str:
-    if matched_game is not None and streamer_interested:
-        if release_date and release_date > datetime.utcnow():
-            return STATUS_UPCOMING
-        return STATUS_STREAMED
-
     if matched_game is not None:
         return STATUS_STREAMED
 
@@ -206,7 +216,23 @@ def sync_recommendation_matches(session) -> int:
     }
 
     for recommendation in recommendations:
-        matched_game = games_by_name.get(recommendation.normalized_name)
+        real_matched_game = games_by_name.get(recommendation.normalized_name)
+
+        if _has_special_source(recommendation):
+            matched_game = None
+        else:
+            matched_game = real_matched_game
+
+        recommendation.matched_game = real_matched_game
+
+        if _is_igdb(recommendation):
+            recommendation.status = STATUS_UPCOMING
+        else:
+            recommendation.status = determine_recommendation_status(
+                release_date=recommendation.release_date,
+                matched_game=matched_game,
+                streamer_interested=bool(recommendation.streamer_interested),
+            )
         previous_matched_game_id = recommendation.matched_game_id
         previous_status = recommendation.status
 
@@ -225,6 +251,16 @@ def sync_recommendation_matches(session) -> int:
         session.flush()
 
     return updated_count
+
+
+def _has_special_source(recommendation):
+    for vote in recommendation.votes:
+        login = (vote.user_login or "").casefold()
+
+        if login in {"tabula", "igdb"}:
+            return True
+
+    return False
 
 
 def refresh_recommendation_lifecycle() -> int:
@@ -434,20 +470,6 @@ async def recommend_game(query: str, user_login: str, user_display_name: str) ->
     try:
         existing = _find_existing_recommendation(session, query)
         if existing:
-            if _is_streamer_recommendation(user_login):
-                changed = _set_streamer_interested(existing, True)
-                changed = _remove_streamer_vote_if_present(session, existing) or changed
-                sync_recommendation_matches(session)
-                session.commit()
-                summary = build_recommendation_summary(existing)
-                if changed:
-                    return _make_result(
-                        "voted",
-                        _format_add_message(summary.title, already_existing=True),
-                        recommendation=summary,
-                        accepted=True,
-                    )
-                return _make_result("duplicate_vote", f"Игра «{existing.title}» уже отмечена как интересная стримеру.")
 
             existing_vote = _find_user_vote_for_recommendation(session, existing.id, user_login)
             if existing_vote:
@@ -484,20 +506,6 @@ async def recommend_game(query: str, user_login: str, user_display_name: str) ->
             source_game_id=metadata.source_game_id,
         )
         if existing:
-            if _is_streamer_recommendation(user_login):
-                changed = _set_streamer_interested(existing, True)
-                changed = _remove_streamer_vote_if_present(session, existing) or changed
-                sync_recommendation_matches(session)
-                session.commit()
-                summary = build_recommendation_summary(existing)
-                if changed:
-                    return _make_result(
-                        "voted",
-                        _format_add_message(summary.title, already_existing=True),
-                        recommendation=summary,
-                        accepted=True,
-                    )
-                return _make_result("duplicate_vote", f"Игра «{existing.title}» уже отмечена как интересная стримеру.")
 
             existing_vote = _find_user_vote_for_recommendation(session, existing.id, user_login)
             if existing_vote:
@@ -532,11 +540,7 @@ async def recommend_game(query: str, user_login: str, user_display_name: str) ->
             source_game_id=metadata.source_game_id,
             source_payload=metadata.source_payload,
         )
-        if _is_streamer_recommendation(user_login):
-            _set_streamer_interested(recommendation, True)
-            _remove_streamer_vote_if_present(session, recommendation)
-        else:
-            add_vote(session, recommendation, user_login, user_display_name)
+        add_vote(session, recommendation, user_login, user_display_name)
 
         if metadata_streamed_match is not None:
             matched_game = session.query(Game).filter_by(name=metadata_streamed_match.name).first()

@@ -543,21 +543,33 @@ def _build_tags_text(recommendation):
 
 
 def _build_recommenders_text(recommendation):
-    result = []
+    tabula_present = False
+    igdb_present = False
+    users = []
 
     for vote in recommendation.votes:
-        if vote.user_login in {
-            RECOMMENDATIONS_STREAMER_LOGIN.casefold(),
-            "igdb"
-        }:
+        login = (vote.user_login or "").casefold()
+
+        if login == "tabula":
+            tabula_present = True
             continue
 
-        if vote.user_display_name.strip().lower() == "tabula":
-            result.append("В желаемом")
-        elif vote.user_display_name.strip().lower() == "igdb":
-            result.append("Хайповое")
-        else:
-            result.append(vote.user_display_name)
+        if login == "igdb":
+            igdb_present = True
+            continue
+
+        users.append(vote.user_display_name)
+
+    result = []
+
+    # порядок важен
+    if tabula_present:
+        result.append("В желаемом")
+
+    if igdb_present:
+        result.append("Хайп")
+
+    result.extend(users)
 
     return ", ".join(result)
 
