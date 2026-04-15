@@ -40,7 +40,7 @@ def _build_stream_row(stream):
         "",
         "",
         "",
-        "",
+        stream.genres_text or "",
         participants,
     ]
 
@@ -212,6 +212,17 @@ def _format_games_sheet(sheet, row_count):
             "fontFamily": "Montserrat",
             "fontSize": 10,
             "foregroundColor": {"red": 229 / 255, "green": 231 / 255, "blue": 235 / 255},},
+    })
+
+    sheet.format(f"G{start_row}:G{end_row}", {
+        "textFormat": {
+            "fontFamily": "Orbitron",
+            "fontSize": 14,
+            "bold": True,
+            "foregroundColor": {"red": 102 / 255, "green": 192 / 255, "blue": 244 / 255}
+        },
+        "horizontalAlignment": "CENTER",
+        "verticalAlignment": "MIDDLE",
     })
 
 
@@ -407,12 +418,13 @@ def _build_stream_comparable_row(stream, manual_columns=None):
         "",
         "",
         "",
-        "",
+        str(row[10]),
         str(row[11]),
     ]
 
     if manual_columns is not None:
-        comparable[6:11] = [str(value) for value in manual_columns]
+        # G-J оставляем ручными, а K (genres_text) всегда синкается из БД.
+        comparable[6:10] = [str(value) for value in manual_columns]
 
     return comparable
 
@@ -434,7 +446,6 @@ def _sync_game_manual_fields_from_sheet(session, existing_rows):
 
         meta.liked = _parse_sheet_bool(normalized_row[7])
         meta.completed = _parse_sheet_bool(normalized_row[9])
-        meta.review_url = normalized_row[11] or None
 
     session.flush()
 
@@ -484,7 +495,7 @@ def _build_game_row(game, stats, rank, manual_columns=None):
         '=IF(HROW()=TRUE;"❤️";"")',
         bool(meta.completed),
         '=IF(JROW()=TRUE;"✅";"")',
-        meta.review_url or "",
+        _build_tags_text(meta),
     ]
 
     if manual_columns is not None:
@@ -720,8 +731,9 @@ def sync_streams_safe():
 
         if row_key in existing:
             old_row = existing[row_key]
-            row[6:11] = old_row[6:11]
-            comparable_row = _build_stream_comparable_row(stream, manual_columns=old_row[6:11])
+            # G-J оставляем ручными, а K (genres_text) всегда синкается из БД.
+            row[6:10] = old_row[6:10]
+            comparable_row = _build_stream_comparable_row(stream, manual_columns=old_row[6:10])
         else:
             comparable_row = _build_stream_comparable_row(stream)
 
