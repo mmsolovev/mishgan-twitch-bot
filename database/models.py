@@ -59,6 +59,7 @@ class Stream(Base):
 
     vod_url = Column(String, nullable=True)
     clips_url = Column(String, nullable=True)
+    genres_text = Column(String, nullable=True)
 
     stream_games = relationship(
         "StreamGame",
@@ -122,6 +123,10 @@ class GameMeta(Base):
     # 🔗 ссылки
     steam_url = Column(String, nullable=True)
     clips_url = Column(String, nullable=True)
+
+    # 🧾 справочная строка (как в recommended_games), можно заполнять позже
+    platforms_text = Column(String, nullable=True)
+    genres_text = Column(String, nullable=True)
 
     game = relationship("Game", back_populates="meta")
 
