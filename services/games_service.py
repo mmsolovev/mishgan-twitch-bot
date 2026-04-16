@@ -85,7 +85,7 @@ def _format_status(liked: bool | None, completed: bool | None) -> str | None:
 
 def _doc_suffix() -> str:
     if GAMES_SHEET_URL:
-        return f" | Все стримы и игры канала {GAMES_SHEET_URL}"
+        return f" | Все игры канала {GAMES_SHEET_URL}"
     return " Таблица игр: ссылка не настроена"
 
 
