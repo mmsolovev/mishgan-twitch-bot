@@ -464,7 +464,7 @@ async def recommend_game(query: str, user_login: str, user_display_name: str) ->
     streamed_match = _find_streamed_game_match(query)
     streamer_mode = _is_streamer_recommendation(user_login)
     if streamed_match is not None and not streamer_mode:
-        return _make_result("already_streamed", build_game_response(query))
+        return _make_result("already_streamed", f"Уже была на стримах {build_game_response(query)}")
 
     session = SessionLocal()
     try:
@@ -496,7 +496,7 @@ async def recommend_game(query: str, user_login: str, user_display_name: str) ->
 
         metadata_streamed_match = _find_streamed_game_match(metadata.title)
         if metadata_streamed_match is not None and not streamer_mode:
-            return _make_result("already_streamed", build_game_response(metadata.title))
+            return _make_result("already_streamed", f"Уже была на стримах {build_game_response(query)}")
 
         existing = _find_existing_recommendation(
             session,
@@ -582,7 +582,7 @@ async def delete_own_last_recommendation(user_login: str) -> RecommendationActio
         title, deleted_recommendation = _remove_vote(session, vote)
         sync_recommendation_matches(session)
         session.commit()
-        suffix = " Игра целиком убрана из таблицы." if deleted_recommendation else ""
+        suffix = " Игра убрана полностью" if deleted_recommendation else ""
         return _make_result("deleted", f"Последняя рекомендация по игре «{title}» удалена.{suffix}")
     finally:
         session.close()
@@ -608,7 +608,7 @@ async def delete_own_recommendation_by_title(query: str, user_login: str) -> Rec
         title, deleted_recommendation = _remove_vote(session, vote)
         sync_recommendation_matches(session)
         session.commit()
-        suffix = " Игра целиком убрана из таблицы." if deleted_recommendation else ""
+        suffix = " Игра убрана полностью" if deleted_recommendation else ""
         return _make_result("deleted", f"Рекомендация по игре «{title}» удалена.{suffix}")
     finally:
         session.close()
@@ -672,7 +672,7 @@ async def admin_delete_recommendations(target_user: str, query: str | None, acto
         title, deleted_recommendation = _remove_vote(session, vote)
         sync_recommendation_matches(session)
         session.commit()
-        suffix = " Игра целиком убрана из таблицы." if deleted_recommendation else ""
+        suffix = " Игра убрана полностью" if deleted_recommendation else ""
         return _make_result("deleted", f"У пользователя {target_user} удалена рекомендация по игре «{title}».{suffix}")
     finally:
         session.close()

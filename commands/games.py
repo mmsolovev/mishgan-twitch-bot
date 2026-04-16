@@ -3,7 +3,7 @@ from twitchio.ext import commands
 from services.command_registry import register_command
 from services.games_service import build_game_response, build_games_help_message
 from utils.cooldowns import check_cooldown
-from utils.delays import human_delay
+from utils.delays import custom_delay
 
 
 def setup(bot):
@@ -20,7 +20,7 @@ def setup(bot):
         if not check_cooldown(ctx, "игры", 10):
             return
 
-        await human_delay()
+        await custom_delay(2)
 
         game = (game or "").strip()
 
