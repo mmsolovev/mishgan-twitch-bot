@@ -30,7 +30,7 @@ def setup(bot):
 
     @commands.command(name="рек")
     async def recommendations_command(ctx, *, game_query: str = None):
-        if not check_cooldown(ctx.author.name, "рек", 8):
+        if not check_cooldown(ctx, "рек", 1):
             return
 
         game_query = (game_query or "").strip()

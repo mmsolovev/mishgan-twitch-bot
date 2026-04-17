@@ -44,6 +44,13 @@ class CandidateMatch:
     overlap: float
 
 
+def _clean_query(query: str | None) -> str:
+    """Cleans the query by removing non-printable characters and stripping whitespace."""
+    if not query:
+        return ""
+    return "".join(c for c in query if c.isprintable()).strip()
+
+
 def _normalize_text(value: str) -> str:
     return " ".join(value.casefold().split())
 
@@ -236,7 +243,7 @@ def _is_confident_match(query: str, best_match: CandidateMatch, other_matches: l
 
 
 def find_game_lookup(query: str) -> GameLookupResult | None:
-    query = (query or "").strip()
+    query = _clean_query(query)
     if not query:
         return None
 
@@ -264,7 +271,7 @@ def build_games_help_message() -> str:
 
 
 def build_game_response(query: str) -> str:
-    query = (query or "").strip()
+    query = _clean_query(query)
     if not query:
         return build_games_help_message()
 
