@@ -17,7 +17,7 @@ def setup(bot):
 
     @commands.command(name="стримы", aliases=("стрим",))
     async def streams_command(ctx, *, date_query: str = None):
-        if not check_cooldown(ctx, "стримы", 10):
+        if not check_cooldown(ctx, "стримы", 5):
             return
 
         await human_delay()

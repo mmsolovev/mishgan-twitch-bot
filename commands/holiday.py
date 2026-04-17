@@ -24,7 +24,7 @@ def setup(bot):
 
     @commands.command(name="праздник")
     async def holiday_command(ctx):
-        if not check_cooldown(ctx, "праздник", 60):
+        if not check_cooldown(ctx, "праздник", 5):
             return
 
         args = ctx.message.content.split()[1:]

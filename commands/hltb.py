@@ -16,7 +16,7 @@ def setup(bot):
 
     @commands.command(name="hltb")
     async def hltb_command(ctx, *, game: str = None):
-        if not check_cooldown(ctx, "hltb", 60):
+        if not check_cooldown(ctx, "hltb", 5):
             return
 
         await human_delay()

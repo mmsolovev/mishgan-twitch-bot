@@ -456,7 +456,7 @@ def _format_add_message(title: str, removed_title: str | None = None, already_ex
 async def recommend_game(query: str, user_login: str, user_display_name: str) -> RecommendationActionResult:
     normalized_query = normalize_recommendation_name(query)
     if not normalized_query:
-        return _make_result("invalid", "Написать в чат: !рек [название игры]")
+        return _make_result("invalid", build_recommendations_help_message())
 
     if _user_is_banned(user_login):
         return _make_fake_add_result(query)

@@ -251,7 +251,7 @@ class EventSubService:
 
         self.recent_raids[raider_login] = now
 
-        delay = random.uniform(2.5, 5.5)
+        delay = random.uniform(8.3, 10.2)
         self.logger.info("[EventSub] scheduling shoutout for %s after %.2fs", raider_login, delay)
         await asyncio.sleep(delay)
 
@@ -364,6 +364,17 @@ class EventSubService:
         return True
 
     @staticmethod
+    def _extract_hours_from_hltb(value: str) -> str:
+        """Извлекает только числовое значение часов из строки HLTB."""
+        if not value:
+            return ""
+        # Находим первое число (целое или с половиной) и возвращаем его как строку
+        match = re.search(r"(\d+\.?[5]?)", value)
+        if match:
+            return match.group(1).replace(".0", "")
+        return ""
+
+    @staticmethod
     def _format_hltb_for_game_change(summary: str) -> str | None:
         if not summary:
             return None
@@ -373,17 +384,19 @@ class EventSubService:
         if len(parts) < 3:
             return None
 
-        story = parts[1].removeprefix("Сюжет:").strip()
-        extra = parts[2].removeprefix("Доп:").strip()
+        story_raw = parts[1].removeprefix("Сюжет:").strip()
+        extra_raw = parts[2].removeprefix("Доп:").strip()
 
-        # ❗ главное правило: если нет нормальных данных — ничего не выводим
-        if not EventSubService._is_valid_hltb_value(story):
+        if not EventSubService._is_valid_hltb_value(story_raw) or not EventSubService._is_valid_hltb_value(extra_raw):
             return None
 
-        if not EventSubService._is_valid_hltb_value(extra):
+        story_hours = EventSubService._extract_hours_from_hltb(story_raw)
+        extra_hours = EventSubService._extract_hours_from_hltb(extra_raw)
+
+        if not story_hours or not extra_hours:
             return None
 
-        return f"Прохождение по HLTB {story}-{extra} часов"
+        return f"Прохождение по HLTB {story_hours}-{extra_hours} часов"
 
     async def fetch_live_stream_snapshot(self):
         streams = await self.bot.fetch_streams(
@@ -395,8 +408,9 @@ class EventSubService:
 
     @staticmethod
     def _is_ignored_game_category(category_name: str | None) -> bool:
-        if not category_name:
-            return False
+        # Сначала проверяем, пустая ли категория. Если да - игнорируем.
+        if not category_name or not category_name.strip():
+            return True
 
         normalized = " ".join(category_name.casefold().split())
-        return normalized in {"just chatting", "special events", "games + demos", ""}
+        return normalized in {"just chatting", "special events", "games + demos", "retro", "variety"}

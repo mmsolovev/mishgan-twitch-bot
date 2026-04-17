@@ -17,7 +17,7 @@ def setup(bot):
     @commands.command(name="инфо")
     async def info_command(ctx, *args):
 
-        if not check_cooldown(ctx, "инфо", 10):
+        if not check_cooldown(ctx, "инфо", 60):
             return
 
         await human_delay()

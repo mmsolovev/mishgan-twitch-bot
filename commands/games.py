@@ -7,7 +7,6 @@ from utils.delays import custom_delay
 
 
 def setup(bot):
-
     register_command(
         "игры",
         "Команда: !игры [название игры] — статистика по игре на стриме и ссылка на общую таблицу",
@@ -20,14 +19,15 @@ def setup(bot):
         if not check_cooldown(ctx, "игры", 10):
             return
 
-        await custom_delay(2)
+        await custom_delay(1, 7.3, 8.2)
 
-        game = (game or "").strip()
+        # Упрощенная проверка, основная логика в games_service
+        cleaned_game = "".join(c for c in (game or "") if c.isprintable()).strip()
 
-        if not game:
+        if not cleaned_game:
             await ctx.send(build_games_help_message())
             return
 
-        await ctx.send(build_game_response(game))
+        await ctx.send(build_game_response(cleaned_game))
 
     bot.add_command(games_command)

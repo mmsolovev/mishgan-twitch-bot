@@ -17,7 +17,7 @@ def setup(bot):
 
     @commands.command(name="команды")
     async def commands_command(ctx):
-        if not check_cooldown(ctx, "команды", 10):
+        if not check_cooldown(ctx, "команды", 5):
             return
 
         args = ctx.message.content.split()[1:]
