@@ -1,7 +1,8 @@
 import asyncio
 import json
+from bisect import bisect_right
 from copy import deepcopy
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 from twitchio.http import Route
@@ -14,6 +15,10 @@ RUNTIME_DIR = Path(__file__).resolve().parent.parent / "storage" / "runtime"
 ACTIVE_SESSION_FILE = RUNTIME_DIR / "active_stream_session.json"
 COMPLETED_SESSIONS_FILE = RUNTIME_DIR / "completed_stream_sessions.json"
 COLLECTOR_STATE_VERSION = 2
+# TwitchTracker выглядит как "таблица каждые 10 минут" в локальном времени канала.
+# Фиксированный MSK (UTC+03:00).
+REPORTING_TZ = timezone(timedelta(hours=3))
+TT_BUCKET_MINUTES = 10
 
 
 class RuntimeStreamCollector:
@@ -49,15 +54,17 @@ class RuntimeStreamCollector:
                 self.active_session.get("stream_id"),
                 live_stream.id,
             )
+            inferred_end = self._infer_session_end_time(self.active_session)
             await self.finalize_active_session(
-                ended_at=self._now_iso(),
+                ended_at=inferred_end,
                 reason="recovered_new_live_stream_on_bootstrap",
             )
 
         if self.active_session and not live_stream:
             self.logger.info("Finalizing stale active session without stream.offline event")
+            inferred_end = self._infer_session_end_time(self.active_session)
             await self.finalize_active_session(
-                ended_at=self._now_iso(),
+                ended_at=inferred_end,
                 reason="recovered_offline_on_bootstrap",
             )
 
@@ -90,8 +97,9 @@ class RuntimeStreamCollector:
                 self.active_session.get("stream_id"),
                 stream_id,
             )
+            ended_at = getattr(data, "started_at", None)
             await self.finalize_active_session(
-                ended_at=self._now_iso(),
+                ended_at=ended_at.isoformat() if ended_at else self._infer_session_end_time(self.active_session),
                 reason="superseded_by_new_stream_online",
             )
 
@@ -127,8 +135,14 @@ class RuntimeStreamCollector:
             return
 
         changed_at = self._now_iso()
-        if self.active_session.get("title") != data.title:
+        # Если сессия стартовала без snapshot (title=None), первый полученный title считаем стартовым.
+        if not self.active_session.get("title") and data.title:
             self.active_session["title"] = data.title
+            self.active_session["title_start"] = data.title
+
+        # Основным title считаем стартовый. Изменения храним в title_history и в title_current.
+        if self.active_session.get("title_current") != data.title:
+            self.active_session["title_current"] = data.title
             self.active_session["title_history"].append(
                 {
                     "title": data.title,
@@ -231,13 +245,19 @@ class RuntimeStreamCollector:
             "started_at": started_at,
             "ended_at": None,
             "duration_minutes": None,
+            # Основной title фиксируем на старте.
             "title": title,
+            "title_start": title,
+            "title_current": title,
             "category_name": category_name,
             "category_id": category_id,
             "title_history": [],
             "category_history": [],
             "game_segments": [],
             "events": [],
+            # Заполняется при завершении сессии: агрегаты по играм (с объединением одинаковых категорий).
+            "games_unique": [],
+            "games_summary": [],
             "metrics": {
                 "sample_interval_seconds": self.sample_interval_seconds,
                 "viewer_samples": [],
@@ -245,10 +265,17 @@ class RuntimeStreamCollector:
                 "follow_events": [],
                 "avg_viewers": None,
                 "max_viewers": None,
+                "hours_watched": None,
+                # TwitchTracker-like 10-минутная сетка (в MSK): интервалы и агрегаты.
+                "viewer_buckets_10m": [],
+                "avg_viewers_10m": None,
+                "max_viewers_10m": None,
+                "hours_watched_10m": None,
                 "followers_start": None,
                 "followers_end": None,
                 "followers_delta": None,
                 "followers_delta_exact": None,
+                "followers_per_hour_exact": None,
             },
             "collector": {
                 "created_at": self._now_iso(),
@@ -306,7 +333,14 @@ class RuntimeStreamCollector:
                 pass
         self.sampling_task = None
 
-        await self.capture_runtime_sample(stream_snapshot=None, reason="stream.finalize", allow_offline_followers=True)
+        ended_dt = self._parse_iso(ended_at)
+        now_dt = datetime.now(timezone.utc)
+        if ended_dt is None or (now_dt - ended_dt) <= timedelta(seconds=30):
+            await self.capture_runtime_sample(
+                stream_snapshot=None,
+                reason="stream.finalize",
+                allow_offline_followers=True,
+            )
 
         session = deepcopy(self.active_session)
         session["status"] = "completed"
@@ -321,6 +355,7 @@ class RuntimeStreamCollector:
                 segment["ended_at"] = ended_at
 
         self._recalculate_metrics(session)
+        self._populate_games_summary(session)
         self._append_completed_session(session, reason)
         self.logger.info(
             "Finalized runtime stream session %s with reason %s",
@@ -420,6 +455,8 @@ class RuntimeStreamCollector:
 
         if not self.active_session.get("title") and stream.title:
             self.active_session["title"] = stream.title
+            self.active_session["title_start"] = stream.title
+            self.active_session["title_current"] = stream.title
             self.active_session["title_history"].append(
                 {
                     "title": stream.title,
@@ -516,7 +553,31 @@ class RuntimeStreamCollector:
         viewer_samples = metrics.get("viewer_samples", [])
         follower_samples = metrics.get("follower_samples", [])
 
-        if viewer_samples:
+        started_at = self._parse_iso(session.get("started_at"))
+        ended_at = self._parse_iso(session.get("ended_at"))
+        if started_at and ended_at and ended_at > started_at and viewer_samples:
+            points = self._viewer_points(viewer_samples)
+            hours_watched = self._integrate_viewers(points, started_at, ended_at) / 3600.0
+            duration_hours = (ended_at - started_at).total_seconds() / 3600.0
+
+            metrics["hours_watched"] = round(hours_watched, 2)
+            metrics["avg_viewers"] = round(hours_watched / duration_hours, 2) if duration_hours > 0 else None
+            metrics["max_viewers"] = self._max_viewers_in_range(points, started_at, ended_at)
+
+            buckets = self._build_tt_buckets(points, started_at, ended_at)
+            metrics["viewer_buckets_10m"] = buckets
+            if buckets:
+                hours_watched_10m = sum(b["hours_watched"] for b in buckets)
+                duration_hours_10m = sum(b["duration_hours"] for b in buckets)
+                metrics["hours_watched_10m"] = round(hours_watched_10m, 2)
+                metrics["avg_viewers_10m"] = (
+                    round(hours_watched_10m / duration_hours_10m, 2) if duration_hours_10m > 0 else None
+                )
+                metrics["max_viewers_10m"] = max(
+                    b["max_viewers"] for b in buckets if b.get("max_viewers") is not None
+                )
+        elif viewer_samples:
+            # Для активной сессии (ended_at ещё нет) оставляем старую логику, чтобы поля были заполнены "на лету".
             viewer_counts = [sample["viewer_count"] for sample in viewer_samples]
             metrics["avg_viewers"] = round(sum(viewer_counts) / len(viewer_counts), 2)
             metrics["max_viewers"] = max(viewer_counts)
@@ -529,6 +590,12 @@ class RuntimeStreamCollector:
 
         follow_events = metrics.get("follow_events", [])
         metrics["followers_delta_exact"] = len(follow_events)
+        if started_at and ended_at and ended_at > started_at:
+            duration_hours = (ended_at - started_at).total_seconds() / 3600.0
+            metrics["followers_per_hour_exact"] = (
+                round(metrics["followers_delta_exact"] / duration_hours, 2) if duration_hours > 0 else None
+            )
+
         self._recalculate_segment_follow_metrics(session)
 
     def _save_active_session(self):
@@ -550,6 +617,11 @@ class RuntimeStreamCollector:
         session.setdefault("title_history", [])
         session.setdefault("category_history", [])
         session.setdefault("game_segments", [])
+        # Семантика: основной title фиксируется на старте; текущий title меняется по channel.update.
+        session.setdefault("title_start", session.get("title"))
+        session.setdefault("title_current", session.get("title"))
+        session.setdefault("games_unique", [])
+        session.setdefault("games_summary", [])
         session.setdefault("collector", {})
         session["collector"].setdefault("created_at", self._now_iso())
         session["collector"].setdefault("updated_at", self._now_iso())
@@ -563,10 +635,16 @@ class RuntimeStreamCollector:
                 "follow_events": [],
                 "avg_viewers": None,
                 "max_viewers": None,
+                "hours_watched": None,
+                "viewer_buckets_10m": [],
+                "avg_viewers_10m": None,
+                "max_viewers_10m": None,
+                "hours_watched_10m": None,
                 "followers_start": None,
                 "followers_end": None,
                 "followers_delta": None,
                 "followers_delta_exact": None,
+                "followers_per_hour_exact": None,
             },
         )
         session["metrics"].setdefault("sample_interval_seconds", self.sample_interval_seconds)
@@ -575,10 +653,16 @@ class RuntimeStreamCollector:
         session["metrics"].setdefault("follow_events", [])
         session["metrics"].setdefault("avg_viewers", None)
         session["metrics"].setdefault("max_viewers", None)
+        session["metrics"].setdefault("hours_watched", None)
+        session["metrics"].setdefault("viewer_buckets_10m", [])
+        session["metrics"].setdefault("avg_viewers_10m", None)
+        session["metrics"].setdefault("max_viewers_10m", None)
+        session["metrics"].setdefault("hours_watched_10m", None)
         session["metrics"].setdefault("followers_start", None)
         session["metrics"].setdefault("followers_end", None)
         session["metrics"].setdefault("followers_delta", None)
         session["metrics"].setdefault("followers_delta_exact", None)
+        session["metrics"].setdefault("followers_per_hour_exact", None)
 
     def _recalculate_segment_follow_metrics(self, session: dict):
         segments = session.get("game_segments", [])
@@ -654,3 +738,269 @@ class RuntimeStreamCollector:
     @staticmethod
     def _now_iso() -> str:
         return datetime.now(timezone.utc).isoformat()
+
+    @staticmethod
+    def _viewer_points(viewer_samples: list[dict]) -> list[tuple[datetime, int]]:
+        points: list[tuple[datetime, int]] = []
+        for sample in viewer_samples:
+            ts = RuntimeStreamCollector._parse_iso(sample.get("sampled_at"))
+            if ts is None:
+                continue
+            try:
+                val = int(sample.get("viewer_count"))
+            except (TypeError, ValueError):
+                continue
+            points.append((ts, val))
+        points.sort(key=lambda p: p[0])
+        return points
+
+    @staticmethod
+    def _infer_session_end_time(session: dict) -> str:
+        """
+        При восстановлении после рестарта нельзя ставить ended_at=now: это ломает вычисление средних значений.
+        Берём последнюю известную активность сессии.
+        """
+        candidates: list[datetime] = []
+
+        metrics = session.get("metrics", {}) if isinstance(session, dict) else {}
+        for sample in (metrics.get("viewer_samples") or []):
+            ts = RuntimeStreamCollector._parse_iso(sample.get("sampled_at"))
+            if ts is not None:
+                candidates.append(ts)
+        for sample in (metrics.get("follower_samples") or []):
+            ts = RuntimeStreamCollector._parse_iso(sample.get("sampled_at"))
+            if ts is not None:
+                candidates.append(ts)
+        for event in (session.get("events") or []):
+            ts = RuntimeStreamCollector._parse_iso(event.get("timestamp"))
+            if ts is not None:
+                candidates.append(ts)
+        collector = session.get("collector", {}) if isinstance(session, dict) else {}
+        for key in ("updated_at", "created_at"):
+            ts = RuntimeStreamCollector._parse_iso(collector.get(key))
+            if ts is not None:
+                candidates.append(ts)
+
+        if candidates:
+            return max(candidates).astimezone(timezone.utc).isoformat()
+        return RuntimeStreamCollector._now_iso()
+
+    @staticmethod
+    def _integrate_viewers(points: list[tuple[datetime, int]], start: datetime, end: datetime) -> float:
+        if not points or end <= start:
+            return 0.0
+
+        times = [t for t, _ in points]
+        values = [v for _, v in points]
+        i = bisect_right(times, start) - 1
+        current_value = values[i] if i >= 0 else values[0]
+        current_time = start
+
+        total = 0.0
+        while current_time < end:
+            next_time = end
+            if i + 1 < len(times) and times[i + 1] < end:
+                next_time = times[i + 1]
+
+            if next_time > current_time:
+                total += float(current_value) * (next_time - current_time).total_seconds()
+
+            current_time = next_time
+            if current_time >= end:
+                break
+
+            i += 1
+            if i < len(values):
+                current_value = values[i]
+            else:
+                break
+
+        return total
+
+    @staticmethod
+    def _value_at(points: list[tuple[datetime, int]], at: datetime) -> int | None:
+        if not points:
+            return None
+        times = [t for t, _ in points]
+        idx = bisect_right(times, at) - 1
+        if idx >= 0:
+            return points[idx][1]
+        return points[0][1]
+
+    @staticmethod
+    def _max_viewers_in_range(points: list[tuple[datetime, int]], start: datetime, end: datetime) -> int | None:
+        if not points or end <= start:
+            return None
+        m = RuntimeStreamCollector._value_at(points, start)
+        for ts, val in points:
+            if ts < start:
+                continue
+            if ts > end:
+                break
+            if m is None or val > m:
+                m = val
+        return m
+
+    @staticmethod
+    def _ceil_to_10min(dt: datetime) -> datetime:
+        dt = dt.replace(second=0, microsecond=0)
+        add = (TT_BUCKET_MINUTES - (dt.minute % TT_BUCKET_MINUTES)) % TT_BUCKET_MINUTES
+        if add == 0:
+            return dt
+        return dt + timedelta(minutes=add)
+
+    @staticmethod
+    def _floor_to_10min(dt: datetime) -> datetime:
+        dt = dt.replace(second=0, microsecond=0)
+        minute = dt.minute - (dt.minute % TT_BUCKET_MINUTES)
+        return dt.replace(minute=minute)
+
+    def _build_tt_buckets(
+        self,
+        points: list[tuple[datetime, int]],
+        started_at: datetime,
+        ended_at: datetime,
+    ) -> list[dict]:
+        """
+        Интервалы как в TwitchTracker:
+        - первая отметка = started_at (для отображения округляем вниз до минуты),
+        - дальше отметки по сетке 10 минут по времени MSK (UTC+03:00),
+        - последний интервал может быть неполным
+        """
+        if ended_at <= started_at:
+            return []
+
+        start_local = started_at.astimezone(REPORTING_TZ)
+        end_local = ended_at.astimezone(REPORTING_TZ)
+
+        label0 = start_local.replace(second=0, microsecond=0)
+        next_boundary = self._ceil_to_10min(label0)
+        if next_boundary <= label0:
+            next_boundary = next_boundary + timedelta(minutes=TT_BUCKET_MINUTES)
+
+        boundaries: list[datetime] = [next_boundary]
+        last_boundary = self._floor_to_10min(end_local)
+        t = next_boundary
+        while t < last_boundary:
+            t = t + timedelta(minutes=TT_BUCKET_MINUTES)
+            boundaries.append(t)
+
+        intervals: list[tuple[datetime, datetime, datetime]] = []
+        first_end = min(boundaries[0], end_local) if boundaries else end_local
+        intervals.append((label0, start_local, first_end))
+
+        for i in range(len(boundaries)):
+            b_start = boundaries[i]
+            if b_start >= end_local:
+                break
+            b_end = end_local
+            if i + 1 < len(boundaries):
+                b_end = min(boundaries[i + 1], end_local)
+            intervals.append((b_start, b_start, b_end))
+
+        buckets: list[dict] = []
+        for label_start, interval_start_local, interval_end_local in intervals:
+            if interval_end_local <= interval_start_local:
+                continue
+            interval_start = interval_start_local.astimezone(timezone.utc)
+            interval_end = interval_end_local.astimezone(timezone.utc)
+            duration_hours = (interval_end - interval_start).total_seconds() / 3600.0
+            if duration_hours <= 0:
+                continue
+            hours_watched = self._integrate_viewers(points, interval_start, interval_end) / 3600.0
+            max_viewers = self._max_viewers_in_range(points, interval_start, interval_end)
+            avg_viewers = (hours_watched / duration_hours) if duration_hours > 0 else None
+            buckets.append(
+                {
+                    "bucket_at": label_start.isoformat(),
+                    "duration_hours": round(duration_hours, 4),
+                    "avg_viewers": round(avg_viewers, 2) if avg_viewers is not None else None,
+                    "max_viewers": max_viewers,
+                    "hours_watched": round(hours_watched, 2),
+                }
+            )
+        return buckets
+
+    def _populate_games_summary(self, session: dict):
+        """
+        Объединение одинаковых игр в одну запись. Метрики из viewer_samples + follow_events.
+        """
+        started_at = self._parse_iso(session.get("started_at"))
+        ended_at = self._parse_iso(session.get("ended_at"))
+        if started_at is None or ended_at is None or ended_at <= started_at:
+            return
+
+        metrics = session.get("metrics", {})
+        points = self._viewer_points(metrics.get("viewer_samples", []))
+        follow_events = metrics.get("follow_events", []) or []
+        segments = session.get("game_segments", []) or []
+
+        order: list[str] = []
+        per_game: dict[str, dict] = {}
+
+        def game_key(seg: dict) -> str:
+            cid = seg.get("category_id") or ""
+            name = seg.get("category_name") or ""
+            return f"{cid}::{name}"
+
+        for seg in segments:
+            seg_start = self._parse_iso(seg.get("started_at"))
+            seg_end = self._parse_iso(seg.get("ended_at"))
+            if seg_start is None or seg_end is None or seg_end <= seg_start:
+                continue
+
+            seg_start = max(seg_start, started_at)
+            seg_end = min(seg_end, ended_at)
+            if seg_end <= seg_start:
+                continue
+
+            k = game_key(seg)
+            if k not in per_game:
+                per_game[k] = {
+                    "category_id": seg.get("category_id"),
+                    "category_name": seg.get("category_name"),
+                    "duration_minutes": 0.0,
+                    "avg_viewers": None,
+                    "peak_viewers": None,
+                    "hours_watched": 0.0,
+                    "followers_gained": 0,
+                    "followers_per_hour": 0.0,
+                }
+                order.append(k)
+
+            duration_minutes = (seg_end - seg_start).total_seconds() / 60.0
+            hours_watched = self._integrate_viewers(points, seg_start, seg_end) / 3600.0
+            peak = self._max_viewers_in_range(points, seg_start, seg_end)
+
+            per_game[k]["duration_minutes"] += duration_minutes
+            per_game[k]["hours_watched"] += hours_watched
+            if peak is not None:
+                cur_peak = per_game[k]["peak_viewers"]
+                per_game[k]["peak_viewers"] = peak if cur_peak is None else max(cur_peak, peak)
+
+            gained = 0
+            for ev in follow_events:
+                f_at = self._parse_iso(ev.get("followed_at"))
+                if f_at is None:
+                    continue
+                if seg_start <= f_at <= seg_end:
+                    gained += 1
+            per_game[k]["followers_gained"] += gained
+
+        summary: list[dict] = []
+        unique_names: list[str] = []
+        for k in order:
+            g = per_game[k]
+            dur_hours = (g["duration_minutes"] / 60.0) if g["duration_minutes"] else 0.0
+            g["duration_minutes"] = round(g["duration_minutes"], 2)
+            g["hours_watched"] = round(g["hours_watched"], 2)
+            g["avg_viewers"] = round((g["hours_watched"] / dur_hours), 2) if dur_hours > 0 else None
+            g["followers_per_hour"] = round((g["followers_gained"] / dur_hours), 2) if dur_hours > 0 else 0.0
+            summary.append(g)
+
+            nm = g.get("category_name")
+            if nm and nm not in unique_names:
+                unique_names.append(nm)
+
+        session["games_summary"] = summary
+        session["games_unique"] = unique_names
