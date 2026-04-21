@@ -19,7 +19,7 @@ def setup(bot):
         if not check_cooldown(ctx, "игры", 10):
             return
 
-        await custom_delay(1, 9.3, 10.2)
+        await custom_delay(1, 7.3, 8.2)
 
         # Упрощенная проверка, основная логика в games_service
         cleaned_game = "".join(c for c in (game or "") if c.isprintable()).strip()

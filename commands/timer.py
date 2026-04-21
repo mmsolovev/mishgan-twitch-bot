@@ -16,9 +16,6 @@ from services.timer_service import (
 )
 
 
-
-
-
 def has_access(ctx) -> bool:
     return ctx.author.is_mod or ctx.author.name in ALLOWED_USERS
 

@@ -74,14 +74,14 @@ def _normalize_user_login(value: str) -> str:
 
 def _doc_suffix() -> str:
     if GAMES_SHEET_URL:
-        return f" Все в листах РЕЛИЗЫ и СОВЕТЫ тут: {GAMES_SHEET_URL}"
+        return f" | Все в листах РЕЛИЗЫ и СОВЕТЫ тут: {GAMES_SHEET_URL}"
     return ""
 
 
 def build_recommendations_help_message() -> str:
     return (
-        "Написать в чат: !рек [точное название игры] — предложить игру для стрима. "
-        "Название лучше писать максимально точное."
+        "MrDestructoid Написать в чат: !рек [точное название игры] — предложить игру для стрима. "
+        "Название лучше писать максимально точное"
         + _doc_suffix()
     )
 

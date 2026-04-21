@@ -267,7 +267,7 @@ def find_game_lookup(query: str) -> GameLookupResult | None:
 
 
 def build_games_help_message() -> str:
-    return "Написать в чат: !игры [название игры] — вывод статистики со стримов по игре" + _doc_suffix()
+    return "MrDestructoid Написать в чат: !игры [название игры] — вывод статистики со стримов по игре" + _doc_suffix()
 
 
 def build_game_response(query: str) -> str:
@@ -283,13 +283,13 @@ def build_game_response(query: str) -> str:
 
     similar_matches = _find_similar_matches(query, ranked_games)
     if not similar_matches:
-        return f"Игра «{query}» не найдена, и похожих вариантов тоже нет. Скорее всего этой игры на стримах не было." + _doc_suffix()
+        return f"MrDestructoid Игра «{query}» не найдена, и похожих вариантов тоже нет. Скорее всего этой игры на стримах не было." + _doc_suffix()
 
     best_match = similar_matches[0]
     other_matches = similar_matches[1:]
 
     if _is_confident_match(query, best_match, other_matches):
-        prefix = f"Точного совпадения не нашел, но скорее всего это «{best_match.game.name}»."
+        prefix = f"MrDestructoid Точного совпадения не найдено, но скорее всего это «{best_match.game.name}»."
         if other_matches:
             prefix += (
                 f" Есть и другие похожие результаты: {len(other_matches)}"
@@ -299,7 +299,7 @@ def build_game_response(query: str) -> str:
 
     suggestions = _format_suggestions(similar_matches)
     return (
-        f"Точного совпадения для «{query}» не найдено. Возможно, имелось в виду: {suggestions}. "
-        "Если ничего не подходит, скорее всего этой игры на стримах не было."
+        f"MrDestructoid Точного совпадения для «{query}» не найдено. Возможно, имелось в виду: {suggestions}. "
+        "Если ничего не подходит, скорее всего этой игры на стримах не было"
         + _doc_suffix()
     )
