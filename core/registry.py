@@ -7,6 +7,7 @@ def load_commands(bot):
     from commands.r import setup as reply_layout_setup
     from commands.recommendations import setup as recommendations_setup
     from commands.timer import setup as timer_setup
+    from commands.time_runtime import setup as time_runtime_setup
     from commands.admin import setup as admin_setup
     from commands.help import setup as help_setup
     from commands.info import setup as info_setup
@@ -19,6 +20,7 @@ def load_commands(bot):
     reply_layout_setup(bot)
     recommendations_setup(bot)
     timer_setup(bot)
+    time_runtime_setup(bot)
     admin_setup(bot)
     help_setup(bot)
     info_setup(bot)

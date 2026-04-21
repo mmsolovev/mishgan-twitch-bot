@@ -324,7 +324,7 @@ class EventSubService:
                 message_parts.append(formatted_hltb)
 
         if GAMES_SHEET_URL:
-            message_parts.append(f"Все игры и стримы канала: {GAMES_SHEET_URL}")
+            message_parts.append(f"Все игры канала: {GAMES_SHEET_URL}")
 
         return " | ".join(message_parts)
 
@@ -368,10 +368,13 @@ class EventSubService:
         """Извлекает только числовое значение часов из строки HLTB."""
         if not value:
             return ""
-        # Находим первое число (целое или с половиной) и возвращаем его как строку
-        match = re.search(r"(\d+\.?[5]?)", value)
+        # Берем первое числовое значение. Важно: не захватываем "голые" точки из строк вида "2.-4.".
+        match = re.search(r"(\d+(?:[.,]\d+)?)", value)
         if match:
-            return match.group(1).replace(".0", "")
+            token = match.group(1).replace(",", ".").rstrip(".")
+            if token.endswith(".0"):
+                token = token[:-2]
+            return token
         return ""
 
     @staticmethod
@@ -396,7 +399,7 @@ class EventSubService:
         if not story_hours or not extra_hours:
             return None
 
-        return f"Прохождение по HLTB {story_hours}-{extra_hours} часов"
+        return f"Прохождение по HLTB {story_hours}-{extra_hours} ч"
 
     async def fetch_live_stream_snapshot(self):
         streams = await self.bot.fetch_streams(
