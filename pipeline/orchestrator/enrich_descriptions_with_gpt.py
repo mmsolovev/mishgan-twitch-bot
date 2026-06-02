@@ -18,7 +18,7 @@ from services.gpt_service import generate_short_description
 from utils.logger import get_logger
 
 # To avoid overwhelming the GPT service, limit concurrent requests.
-CONCURRENT_GPT_REQUESTS = 1
+CONCURRENT_GPT_REQUESTS = 2
 
 
 async def _process_game(session: Session, game: RecommendedGame, semaphore: asyncio.Semaphore) -> bool:
@@ -31,6 +31,7 @@ async def _process_game(session: Session, game: RecommendedGame, semaphore: asyn
     async with semaphore:
         # 1. Extract English summary from the source_payload JSON.
         if not game.source_payload:
+            logger.warning(f"Game '{game.title}' is missing source_payload.")
             return False
 
         try:

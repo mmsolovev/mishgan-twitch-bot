@@ -1,14 +1,18 @@
 import asyncio
 import re
 
-import g4f
+from g4f import ChatCompletion
 
 from utils.logger import get_logger
 
 logger = get_logger("services.gpt")
 
 # Models are tried in order on each retry to hit different g4f providers.
-GPT_MODELS = ["", "openai", "gpt-4"]
+GPT_MODELS = [
+    "",
+    "",
+    "",
+]
 GPT_TIMEOUT = 30
 MAX_RETRIES = len(GPT_MODELS)
 
@@ -20,8 +24,8 @@ async def ask_gpt(prompt: str) -> str:
     loop = asyncio.get_running_loop()
 
     def sync_request():
-        return g4f.ChatCompletion.create(
-            model="",
+        return ChatCompletion.create(
+            model="gpt-3.5-turbo",
             messages=[
                 {
                     "role": "system",
@@ -43,7 +47,7 @@ async def _gpt_request(system_prompt: str, user_text: str, model: str) -> str | 
     loop = asyncio.get_running_loop()
 
     def sync_request():
-        return g4f.ChatCompletion.create(
+        return ChatCompletion.create(
             model=model,
             messages=[
                 {"role": "system", "content": system_prompt},
@@ -78,9 +82,14 @@ def _is_likely_russian(text: str) -> bool:
 
 async def generate_short_description(text: str) -> str | None:
     system_prompt = (
-        "Ты переводишь описание игры с английского на русский язык. "
-        "Отвечай ТОЛЬКО на русском языке. "
-        "Краткий пересказ, максимум 170 символов. Без лишней воды."
+        "Ты — опытный копирайтер, специализирующийся на кратких и интересных описаниях игр для русскоязычной аудитории. "
+        "Твоя задача — пересказать англоязычное описание игры на русском языке, сохранив ключевые особенности и жанр. "
+        "Описание должно быть лаконичным (не более 170 символов), увлекательным и написано живым языком. "
+        "Не используй клише и канцеляризмы. Ответ должен содержать только сгенерированное описание, без лишних фраз. "
+        "Вот примеры хороших описаний:\n"
+        "Пример 1: 'Хардкорный лутер-шутер с элементами RPG. Исследуй аномальную зону, сражайся с мутантами и другими игроками, ищи артефакты и выживай.'\n"
+        "Пример 2: 'Уютный симулятор жизни, где ты управляешь фермой, заводишь друзей и раскрываешь тайны маленького городка. Идеально для отдыха.'\n"
+        "Пример 3: 'Динамичный рогалик, в котором ты — бог, сбежавший из подземного мира. Прорубайся через орды врагов, используя мифическое оружие и дары Олимпа.'"
     )
 
     for attempt, model in enumerate(GPT_MODELS, start=1):
@@ -94,6 +103,14 @@ async def generate_short_description(text: str) -> str | None:
                 wait = 2 ** attempt
                 logger.warning("Retrying with next model in %ds...", wait)
                 await asyncio.sleep(wait)
+            continue
+
+        # Check if the response is a refusal
+        if "отказ" in raw.lower() or "не могу" in raw.lower():
+            logger.warning(
+                "GPT refused to generate a description (model=%s, preview=%r)",
+                model, raw[:80],
+            )
             continue
 
         shortened = raw[:170]
