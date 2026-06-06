@@ -70,7 +70,7 @@ def get_current_ref() -> LostEpisodeRef | None:
     episode = state.get("episode")
     if not isinstance(season, int) or not isinstance(episode, int):
         return None
-    if season <= 0 or episode <= 0:
+    if season < 0 or episode < 0:
         return None
     return LostEpisodeRef(season=season, episode=episode)
 
@@ -176,13 +176,24 @@ def format_current_episode_for_chat() -> str | None:
         return None
 
     data = load_lost_data()
+    series = data.get("series") if isinstance(data, dict) else None
+    if not isinstance(series, dict):
+        return None
+
+    series_title_ru = series.get("title_ru")
+    series_title_en = series.get("title_en")
+
+    if not series_title_ru or not series_title_en:
+        return None
+
+    if ref.season == 0 and ref.episode == 0:
+        return f"MrDestructoid Сериал: {series_title_ru} ({series_title_en})"
+
     found = _find_episode(data, ref)
     if not found:
         return None
 
-    series, season, ep = found
-    series_title_ru = series.get("title_ru")
-    series_title_en = series.get("title_en")
+    _series, season, ep = found
     season_number = season.get("season_number")
     season_year = season.get("year")
     episode_number = ep.get("episode_number")
@@ -190,7 +201,7 @@ def format_current_episode_for_chat() -> str | None:
     episode_title_en = ep.get("title_en")
     imdb_rating = ep.get("imdb_rating")
 
-    if not series_title_ru or not series_title_en or not episode_title_ru or not episode_title_en:
+    if not episode_title_ru or not episode_title_en:
         return None
 
     msg = (
@@ -225,12 +236,20 @@ def set_current_episode(ref: LostEpisodeRef, *, set_started_time_now: bool = Tru
     save_lost_state(state)
 
 
+def set_generic_series_state() -> None:
+    state = load_lost_state()
+    state["season"] = 0
+    state["episode"] = 0
+    state["online"] = True
+    state["started_at_msk"] = None
+    save_lost_state(state)
+
+
 def increment_episode() -> LostEpisodeRef | None:
     data = load_lost_data()
     cur = get_current_ref()
 
-    # если ещё ничего не выставляли — начнём с первой серии первого сезона
-    if not cur:
+    if not cur or (cur.season == 0 and cur.episode == 0):
         series = data.get("series") if isinstance(data, dict) else None
         seasons = series.get("seasons") if isinstance(series, dict) else None
         if not isinstance(seasons, list) or not seasons:

@@ -9,6 +9,7 @@ from services.lost_movie_service import (
     format_current_episode_for_chat,
     increment_episode,
     set_current_episode,
+    set_generic_series_state,
     set_online_status,
     set_started_time,
 )
@@ -42,7 +43,7 @@ def _parse_ref(value: str) -> LostEpisodeRef | None:
     if not (left.isdigit() and right.isdigit()):
         return None
     season, episode = int(left), int(right)
-    if season <= 0 or episode <= 0:
+    if season < 0 or episode < 0:
         return None
     return LostEpisodeRef(season=season, episode=episode)
 
@@ -75,11 +76,13 @@ def setup(bot):
         op = str(args[0]).casefold()
 
         if op == "+":
-            set_online_status(True)
-            # "!фильм +" → следующая серия
-            # "!фильм + 2-4" → конкретная серия
             if len(args) >= 2:
-                ref = _parse_ref(str(args[1]))
+                arg = str(args[1])
+                if arg == "0":
+                    set_generic_series_state()
+                    return
+
+                ref = _parse_ref(arg)
                 if not ref:
                     await human_delay()
                     await ctx.send("MrDestructoid Формат: !фильм + 2-4")
@@ -87,6 +90,7 @@ def setup(bot):
                 set_current_episode(ref, set_started_time_now=True)
                 return
 
+            set_online_status(True)
             nxt = increment_episode()
             if not nxt:
                 await human_delay()
