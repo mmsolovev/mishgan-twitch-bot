@@ -45,10 +45,13 @@ class CandidateMatch:
 
 
 def _clean_query(query: str | None) -> str:
-    """Cleans the query by removing non-printable characters and stripping whitespace."""
+    """Cleans the query by removing non-printable/invisible characters and stripping whitespace."""
     if not query:
         return ""
-    return "".join(c for c in query if c.isprintable()).strip()
+    cleaned = "".join(c for c in query if c.isprintable()).strip()
+    if not any(c.isalnum() for c in cleaned):
+        return ""
+    return cleaned
 
 
 def _normalize_text(value: str) -> str:
