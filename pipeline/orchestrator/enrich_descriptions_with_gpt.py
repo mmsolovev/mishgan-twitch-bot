@@ -18,7 +18,10 @@ from services.gpt_service import generate_short_description
 from utils.logger import get_logger
 
 # To avoid overwhelming the GPT service, limit concurrent requests.
-CONCURRENT_GPT_REQUESTS = 2
+CONCURRENT_GPT_REQUESTS = 1
+
+# Delay between processing games to respect g4f rate limits (Ollama: 5 req/min).
+GAME_DELAY = 15
 
 
 async def _process_game(session: Session, game: RecommendedGame, semaphore: asyncio.Semaphore) -> bool:
@@ -32,6 +35,7 @@ async def _process_game(session: Session, game: RecommendedGame, semaphore: asyn
         # 1. Extract English summary from the source_payload JSON.
         if not game.source_payload:
             logger.warning(f"Game '{game.title}' is missing source_payload.")
+            await asyncio.sleep(GAME_DELAY)
             return False
 
         try:
@@ -39,15 +43,17 @@ async def _process_game(session: Session, game: RecommendedGame, semaphore: asyn
             summary = payload.get("summary")
         except (json.JSONDecodeError, AttributeError):
             logger.warning(f"Could not parse source_payload for game: {game.title}")
+            await asyncio.sleep(GAME_DELAY)
             return False
 
         # Skip if summary is too short or non-existent to be useful.
-        if not summary or not isinstance(summary, str) or len(summary.strip()) < 50:
+        if not summary or not isinstance(summary, str) or len(summary.strip()) < 10:
             logger.warning(
                 "Summary too short (%d chars) for: %s",
                 len(summary.strip()) if isinstance(summary, str) else 0,
                 game.title,
             )
+            await asyncio.sleep(GAME_DELAY)
             return False
 
         # 2. Call GPT service to generate a short description.
@@ -56,19 +62,23 @@ async def _process_game(session: Session, game: RecommendedGame, semaphore: asyn
             short_description = await generate_short_description(summary)
         except Exception as e:
             logger.error(f"GPT request failed for '{game.title}': {e}")
+            await asyncio.sleep(GAME_DELAY)
             return False
 
         # 3. Save the new description to the session.
         if not short_description:
             logger.warning("GPT returned no description for: %s", game.title)
+            await asyncio.sleep(GAME_DELAY)
             return False
 
         if set_game_short_description(session, game, short_description):
             logger.info(f"Successfully generated and set description for: {game.title}")
+            await asyncio.sleep(GAME_DELAY)
             return True
 
         logger.warning("set_game_short_description returned False for: %s", game.title)
 
+    await asyncio.sleep(GAME_DELAY)
     return False
 
 
