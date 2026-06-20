@@ -58,65 +58,11 @@ def setup(bot):
 
     @commands.command(name="фильм", aliases=ALIASES)
     async def movie_command(ctx, *args):
-        if not check_cooldown(ctx, "фильм", 10):
+        if not check_cooldown(ctx, "фильм", 20):
             return
 
-        # Любые аргументы — только для ADMINS.
-        if args and not _is_admin(ctx):
-            return
-
-        # Без аргументов: выводим текущую серию (если задана).
-        if not args:
-            msg = format_current_episode_for_chat()
-            if msg:
-                await human_delay()
-                await ctx.send(msg)
-            return
-
-        op = str(args[0]).casefold()
-
-        if op == "+":
-            if len(args) >= 2:
-                arg = str(args[1])
-                if arg == "0":
-                    set_generic_series_state()
-                    return
-
-                ref = _parse_ref(arg)
-                if not ref:
-                    await human_delay()
-                    await ctx.send("MrDestructoid Формат: !фильм + 2-4")
-                    return
-                set_current_episode(ref, set_started_time_now=True)
-                return
-
-            set_online_status(True)
-            nxt = increment_episode()
-            if not nxt:
-                await human_delay()
-                await ctx.send("MrDestructoid Не получилось определить следующую серию")
-            return
-
-        if op == "-":
-            # "!фильм -" → выставить "online": False
-            # "!фильм - time" → удалить только время
-            if len(args) >= 2 and str(args[1]).casefold() == "time":
-                clear_time_only()
-                return
-            clear_all()
-            return
-
-        if op == "time":
-            # "!фильм time 13:47" → задать время
-            # "!фильм time" → поставить текущее время
-            value = str(args[1]) if len(args) >= 2 else None
-            ok = set_started_time(value)
-            if not ok:
-                await human_delay()
-                await ctx.send("MrDestructoid Формат времени: HH:MM (например 13:47)")
-            return
-
-        # неизвестный аргумент: ничего не делаем
+        await human_delay()
+        await ctx.send("MrDestructoid Сериал Lost полностью просмотрен")
         return
 
     bot.add_command(movie_command)
