@@ -1,0 +1,298 @@
+Давай проанализирую проект. Сначала изучу структуру кодовой базы.
+
+Explore project structure
+
+Find database-related code
+
+Теперь давайте подробно изучу текущие модели и ключевые файлы.
+
+Теперь давайте изучу ключевые файлы с бизнес-логикой и загрузкой данных.
+
+Давайте проверю ещё несколько ключевых файлов.
+
+Теперь у меня есть полная картина. Давайте составлю детальный план миграции.
+
+3 todos
+
+0 todos
+
+---
+
+# Анализ миграции: SQLite → PostgreSQL + новая схема
+
+## 1. Текущее состояние vs Целевая схема
+
+### Текущие таблицы (9)
+
+| Таблица | Ключевые колонки |
+|---------|-----------------|
+| `games` | id, name |
+| `streams` | id, external_id, date, duration, avg/max_viewers, followers, views, title, vod_url, clips_url, genres_text |
+| `stream_games` | stream_id, game_id, position (composite PK) |
+| `games_stats` | game_id, period, hours_streamed, avg/max_viewers, followers_per_hour, streams_count, last_stream |
+| `games_meta` | game_id, liked, completed, review_url, hltb_hours, steam_url, clips_url, platforms_text, genres_text |
+| `participants` | id, name, display_name, twitch_url |
+| `stream_participants` | stream_id, participant_id (association) |
+| `recommended_games` | id, query_name, normalized_name, title, status, release_date, ...source fields..., matched_game_id, streamer_interested |
+| `recommended_game_votes` | id, recommended_game_id, user_login, user_display_name, created_at |
+
+### Целевые таблицы (40+)
+
+Схема из `db_project.txt` содержит **40+ таблиц**. Многие из них полностью новые и не имеют текущего аналога.
+
+---
+
+## 2. Маппинг: что становится чем
+
+### Таблицы с изменённой структурой
+
+| Текущая | Целевая | Изменения |
+|---------|---------|-----------|
+| `games` | `games` | +slug, +game_type, +parent_game_id, +franchise_id, +created_at, +updated_at |
+| `streams` | `streams` | date→started_at, +ended_at, duration→duration_minutes (generated), followers→followers_gained, views→views_gained, -clips_url, -genres_text, +created_at, +updated_at |
+| `stream_games` | `stream_games` | +id (PK), +started_at, +ended_at, +duration_minutes, +avg_viewers, +peak_viewers, +followers_gained |
+| `games_stats` | `game_stats` | Переименование, -period, hours_streamed→streamed_hours, last_stream сохраняется |
+| `games_meta` | **УДАЛЯЕТСЯ** | Разбивается на: `game_metadata_igdb`, `game_metadata_hltb`, `streamer_games` |
+| `participants` | **УДАЛЯЕТСЯ** | Заменяется на `users` |
+| `stream_participants` | `streamers_on_stream` | Новая структура: +role |
+| `recommended_games` | `game_recommendations` | Полностью другая модель: user_id + game_id + recommendation_note |
+| `recommended_game_votes` | **УДАЛЯЕТСЯ** | Модель голосования убрана |
+
+### Новые таблицы (без текущего аналога)
+
+- `users` — вместо `participants`, но с Twitch-авторизацией
+- `duels`, `duels_*` — система дуэлей (7 таблиц)
+- `games_franchises` — франшизы игр
+- `genres`, `platforms` — справочники
+- `clips`, `clip_tags` — клипы
+- `calendar_days`, `holidays`, `famous_persons` — календарь
+- `bot_commands`, `bot_command_aliases`, `command_usage_logs` — команды бота
+- `chat_messages`, `vip_history` — чат и VIP
+- `twitch_authorizations`, `web_sessions` — авторизация
+- `twitch_rewards`, `twitch_reward_redemptions` — награды
+- `streamer_games` — отношение стримера к игре (вместо `games_meta.liked/completed`)
+- `game_aliases` — алиасы игр
+- `game_genres`, `game_platforms` — M:N связи
+- `stream_runtime_samples`, `stream_runtime_buckets` — runtime-аналитика
+
+---
+
+## 3. Пошаговый план миграции
+
+### Этап 1: Инфраструктура (БД + подключение)
+
+| # | Действие | Файлы |
+|---|----------|-------|
+| 1.1 | Добавить `psycopg2-binary` (или `asyncpg`) в `requirements.txt` | `requirements.txt` |
+| 1.2 | Переписать `database/db.py`: читать `DATABASE_URL` из `.env`, поддержка PostgreSQL | `database/db.py`, `.env`, `.env.example` |
+| 1.3 | Добавить PostgreSQL-сервис в `docker-compose.yml` | `docker-compose.yml` |
+| 1.4 | Обновить `Dockerfile` (установка системных зависимостей для psycopg2) | `Dockerfile` |
+
+### Этап 2: Новые ORM-модели
+
+| # | Действие | Файлы |
+|---|----------|-------|
+| 2.1 | Создать модели для `users`, `games_franchises`, `genres`, `platforms` | `database/models.py` (новые классы) |
+| 2.2 | Создать модели для `game_metadata_igdb`, `game_metadata_hltb`, `game_aliases`, `game_stats` | `database/models.py` |
+| 2.3 | Создать модели для `streamer_games`, `game_recommendations`, `game_genres`, `game_platforms` | `database/models.py` |
+| 2.4 | Создать модели для `duels_*` (7 таблиц) | `database/models.py` (новый модуль?) |
+| 2.5 | Создать модели для `clips`, `clip_tags` | `database/models.py` |
+| 2.6 | Создать модели для `calendar_days`, `holidays`, `famous_persons` | `database/models.py` |
+| 2.7 | Создать модели для `bot_commands`, `bot_command_aliases`, `command_usage_logs` | `database/models.py` |
+| 2.8 | Создать модели для `chat_messages`, `vip_history`, `twitch_authorizations`, `web_sessions` | `database/models.py` |
+| 2.9 | Создать модели для `twitch_rewards`, `twitch_reward_redemptions` | `database/models.py` |
+| 2.10 | Создать модели для `streamers_on_stream` (вместо `stream_participants`) | `database/models.py` |
+| 2.11 | Создать модели для `stream_runtime_samples`, `stream_runtime_buckets` | `database/models.py` |
+| 2.12 | Переписать `stream_games` (новый PK, новые колонки) | `database/models.py` |
+| 2.13 | Обновить `streams` (новые колонки, generated column) | `database/models.py` |
+| 2.14 | Обновить `games` (новые колонки) | `database/models.py` |
+
+### Этап 3: Миграция данных
+
+| # | Действие | Файлы |
+|---|----------|-------|
+| 3.1 | Создать скрипт миграции данных SQLite → PostgreSQL | `database/migrate_to_pg.py` (новый) |
+| 3.2 | Маппинг `participants` → `users` (создание Twitch-пользователей) | миграционный скрипт |
+| 3.3 | Маппинг `stream_participants` → `streamers_on_stream` | миграционный скрипт |
+| 3.4 | Маппинг `games_meta.liked/completed` → `streamer_games` | миграционный скрипт |
+| 3.5 | Маппинг `games_meta.hltb_hours/steam_url` → `game_metadata_hltb`/`game_metadata_igdb` | миграционный скрипт |
+| 3.6 | Маппинг `games_meta.platforms_text/genres_text` → `game_platforms`/`game_genres` + `platforms`/`genres` | миграционный скрипт |
+| 3.7 | Маппинг `recommended_games` + `recommended_game_votes` → `game_recommendations` | миграционный скрипт |
+| 3.8 | Маппинг `games_stats` → `game_stats` | миграционный скрипт |
+| 3.9 | Создание `game_aliases` из текущих `games.name` | миграционный скрипт |
+| 3.10 | Заполнение `calendar_days` (366 записей) | seed-скрипт |
+
+### Этап 4: Бизнес-логика (самый объёмный)
+
+| # | Действие | Файлы |
+|---|----------|-------|
+| 4.1 | **`pipeline/load/load_games.py`** — переписать `get_or_create_game`: убрать автосоздание `GameMeta`, добавить `game_aliases` | `pipeline/load/load_games.py` |
+| 4.2 | **`pipeline/load/load_streams.py`** — переписать `sync_streams`: новые колонки streams, новый `stream_games` с PK | `pipeline/load/load_streams.py` |
+| 4.3 | **`pipeline/load/load_game_stats.py`** — переписать `sync_game_stats`: таблица `game_stats` без `period` | `pipeline/load/load_game_stats.py` |
+| 4.4 | **`pipeline/load/load_game_meta.py`** — ПОЛНОСТЬЮ переписать: замена `GameMeta` на 3 таблицы | `pipeline/load/load_game_meta.py` |
+| 4.5 | **`pipeline/load/load_participants.py`** — заменить `Participant` на `User`, `stream_participants` → `streamers_on_stream` | `pipeline/load/load_participants.py` |
+| 4.6 | **`pipeline/load/load_stream_games.py`** — обновить под новую модель `StreamGame` с PK | `pipeline/load/load_stream_games.py` |
+| 4.7 | **`pipeline/load/load_recommendations.py`** — ПОЛНОСТЬЮ переписать: новая модель `game_recommendations` | `pipeline/load/load_recommendations.py` |
+| 4.8 | **`services/games_service.py`** — обновить запросы: `GameStats` → `GameStats`, `GameMeta` → `streamer_games` | `services/games_service.py` |
+| 4.9 | **`services/streams_service.py`** — обновить: `Stream.date` → `Stream.started_at`,JOIN через `streamers_on_stream` | `services/streams_service.py` |
+| 4.10 | **`services/recommendations_service.py`** — ПОЛНОСТЬЮ переписать под новую модель | `services/recommendations_service.py` |
+| 4.11 | **`pipeline/delivery/sheets_*.py`** — все 4 файла: обновить запросы к новым моделям | `pipeline/delivery/sheets_*.py` |
+| 4.12 | **`pipeline/orchestrator/*.py`** — все 6 файлов: обновить под новые модели | `pipeline/orchestrator/*.py` |
+| 4.13 | **`utils/db_manage.py`** — переписать с sqlite3 на PostgreSQL | `utils/db_manage.py` |
+| 4.14 | **`database/seed.py`** — переписать под новую схему | `database/seed.py` |
+| 4.15 | **`database/init_db.py`** — обновить (или заменить на Alembic) | `database/init_db.py` |
+
+### Этап 5: Удаление устаревшего
+
+| # | Действие | Файлы |
+|---|----------|-------|
+| 5.1 | Удалить класс `GameMeta` | `database/models.py` |
+| 5.2 | Удалить класс `Participant` | `database/models.py` |
+| 5.3 | Удалить `stream_participants` association table | `database/models.py` |
+| 5.4 | Удалить `RecommendedGame`, `RecommendedGameVote` | `database/models.py` |
+| 5.5 | Удалить миграционные скрипты SQLite | `database/migrate_*.py` |
+| 5.6 | Удалить `storage/streams.db` (или архивировать) | `storage/streams.db` |
+
+---
+
+## 4. Полный список файлов, требующих изменений
+
+### Обязательные изменения (35 файлов)
+
+**Критические (переписывание):**
+1. `database/db.py` — новое подключение к PostgreSQL
+2. `database/models.py` — все модели (40+ таблиц)
+3. `database/init_db.py` — инициализация новой схемы
+4. `database/seed.py` — seed-данные под новую схему
+5. `pipeline/load/load_game_meta.py` — полная переработка
+6. `pipeline/load/load_recommendations.py` — полная переработка
+7. `services/recommendations_service.py` — полная переработка
+8. `utils/db_manage.py` — sqlite3 → PostgreSQL
+
+**Значительные изменения:**
+9. `requirements.txt` — добавить psycopg2
+10. `.env` / `.env.example` — добавить DATABASE_URL
+11. `docker-compose.yml` — PostgreSQL-сервис
+12. `Dockerfile` — системные зависимости
+13. `pipeline/load/load_streams.py` — новые колонки streams
+14. `pipeline/load/load_games.py` — убрать автосоздание GameMeta
+15. `pipeline/load/load_game_stats.py` — новая таблица game_stats
+16. `pipeline/load/load_participants.py` — Participant → User
+17. `pipeline/load/load_stream_games.py` — новая модель StreamGame
+18. `services/games_service.py` — новые JOIN'ы
+19. `services/streams_service.py` — новые колонки
+20. `pipeline/delivery/sheets_games.py` — обновить запросы
+21. `pipeline/delivery/sheets_streams.py` — обновить запросы
+22. `pipeline/delivery/sheets_releases.py` — обновить запросы
+23. `pipeline/delivery/sheets_recommendations.py` — обновить запросы
+24. `pipeline/orchestrator/import_json_to_db.py` — обновить
+25. `pipeline/orchestrator/import_igdb_releases.py` — обновить
+26. `pipeline/orchestrator/enrich_descriptions_with_gpt.py` — обновить
+27. `pipeline/orchestrator/sync_wishlist.py` — обновить
+28. `pipeline/orchestrator/update_upcoming_release_dates.py` — обновить
+29. `pipeline/orchestrator/sync_sheets.py` — обновить
+30. `pipeline/orchestrator/parse_streams_json.py` — возможно, обновить
+
+**Удаление:**
+31. `database/migrate_streams.py` — удалить
+32. `database/migrate_games_meta.py` — удалить
+33. `database/migrate_recommendations.py` — удалить
+
+**Возможные изменения (косвенные):**
+34. `config/settings.py` — возможно, добавить DB-настройки
+35. `pipeline/transform/streams_transform.py` — возможно, затронуто
+
+---
+
+## 5. Потенциальные проблемы и ошибки
+
+### Критические
+
+| Проблема | Описание | Решение |
+|----------|----------|---------|
+| **`datetime.utcnow()`** | Используется в `recommendations_service.py:225,236` — deprecated в Python 3.12+, может работать иначе | Заменить на `datetime.now(timezone.utc)` |
+| **SQLite vs PostgreSQL типы** | `String` в SQLite — любой тип, в PostgreSQL — varchar/text. `Boolean` в SQLite — 0/1, в PostgreSQL — true/false | SQLAlchemy абстрагирует, но проверить все default-значения |
+| **`generated` колонки** | `duration_minutes` и `stream_games.duration_minutes` — в PostgreSQL это GENERATED ALWAYS AS, требует миграционный SQL | Использовать `Computed()` в SQLAlchemy или property |
+| **`text` vs `String`** | В DBML `text` ≠ `String(255)`. В PostgreSQL `text` и `varchar` — почти одинаково, но надо проверить индексы | Использовать `Text()` для длинных полей |
+| **UUID PK** | `web_sessions.id` — UUID. SQLite не поддерживает нативный UUID | В PostgreSQL использовать `Uuid` тип |
+| **`json` тип** | `game_metadata_igdb.raw_payload` — `json`. SQLite хранит как text | В PostgreSQL использовать `JSONB` |
+| **`smallint`** | `calendar_days.day`, `month`, `day_of_year` — `smallint`. SQLAlchemy маппинг через `SmallInteger` | Проверить совместимость |
+| **`bigint` PK** | Многие таблицы используют `bigint` PK. SQLite — это всегда integer | В PostgreSQL `BIGINT` |
+| **`float` vs `numeric`** | `float` в DBML — PostgreSQL `real`/`double precision`. Для денег/точных значений лучше `Numeric` | Проверить, где нужна точность |
+| **Нет Alembic** | Текущие миграции — ad-hoc скрипты. PostgreSQL требует нормальную миграционную систему | Установить Alembic |
+
+### Средние
+
+| Проблема | Описание |
+|----------|----------|
+| **Маппинг `participants` → `users`** | `participants` — простые участники (name, display_name). `users` — полноценные Twitch-пользователи. Данные могут не перенестись без потерь |
+| **`recommended_games` → `game_recommendations`** | Полностью другая модель. Текущие рекомендации с голосами невозможно напрямую перенести — нужна конвертация |
+| **`games_meta` → 3 таблицы** | Текущие `liked`, `completed` идут в `streamer_games`, `hltb_hours` → `game_metadata_hltb`, `steam_url` → `game_metadata_igdb`. Нужно определить `streamer_id` для `streamer_games` |
+| **Потеря `period` в `game_stats`** | Текущая таблица поддерживает несколько периодов (`all`, `month`, etc.). Целевая — только один набор статистики |
+| **`game_aliases`** | Текущие `games.name` должны стать алиасами. Нужно decide: что является primary alias? |
+| **Нет `stream_participants` в целевой** | Заменяется на `streamers_on_stream`, но с другим смыслом: участники vs стримеры на стриме |
+
+### Низкие
+
+| Проблема | Описание |
+|----------|----------|
+| **Синхронная vs асинхронная** | Текущий код использует синхронный SQLAlchemy. PostgreSQL лучше работает с async (asyncpg). Не критично, но стоит рассмотреть |
+| **`casefold()` в коде** | PostgreSQL по умолчанию case-sensitive. Если где-то используется `LIKE` без `ILIKE`, будут проблемы с поиском |
+| **`datetime` timezone** | SQLite не хранит timezone. PostgreSQL — `TIMESTAMP` или `TIMESTAMPTZ`. Надо выбрать и быть консистентным |
+| **`ON DELETE CASCADE`** | Текущие ForeignKey в целевой схеме не указывают `ON DELETE`. SQLite не поддерживает FK по умолчанию. PostgreSQL — поддерживает, но нужно явно указать каскады |
+| **Индексы** | Текущие индексы определены в DBML, но в SQLAlchemy нужно будет объявить их явно через `Index()` |
+| **`storage/streams.db`** | Файл будет не нужен. Нужно обновить `.gitignore`, `Dockerfile`, `docker-compose.yml` |
+
+---
+
+## 6. Рекомендуемый порядок выполнения
+
+```
+Фаза 1: Инфраструктура (1-2 дня)
+├── PostgreSQL в Docker
+├── psycopg2 + connection pool
+└── .env конфигурация
+
+Фаза 2: Модели (2-3 дня)
+├── Новые ORM-модели (40+ таблиц)
+├── Alembic для миграций
+└── Проверка create_all()
+
+Фаза 3: Миграция данных (1-2 дня)
+├── Скрипт конвертации SQLite → PG
+├── Тестирование на копии данных
+└── Валидация целостности
+
+Фаза 4: Бизнес-логика (3-5 дней)
+├── Load layer (7 файлов)
+├── Service layer (3 файла)
+├── Delivery layer (4 файла)
+├── Orchestrator layer (6 файлов)
+└── Utils (1 файл)
+
+Фаза 5: Тестирование (1-2 дня)
+├── ETL pipeline тест
+├── Chat-команды тест
+├── Google Sheets sync тест
+└── Деплой
+```
+
+**Итого: ~8-14 рабочих дней**
+
+---
+
+## 7. Вопросы к тебе
+
+1. **Нужно ли переносить существующие данные** из SQLite в PostgreSQL, или начнёшь с чистой БД?
+2. **Alembic** — будешь использовать для миграций, или ad-hoc скрипты как сейчас?
+3. **Async SQLAlchemy** — планируешь переход на асинхронный драйвер (`asyncpg`) или останешься на синхронном (`psycopg2`)?
+4. **Текущие рекомендации** (`recommended_games` + `recommended_game_votes`) — нужно ли конвертировать старые голоса в новую модель `game_recommendations`, или начинаешь с нуля?
+5. **Таблица `users`** — откуда брать данные? Сейчас `participants` — это просто имена из заголовков стримов. Нужно ли интегрировать Twitch API для получения `twitch_user_id`?
+
+исправления по текущему проекту бд
+
+1. streams duration_minutes не должна быть генерируемая, так как источники продолжительности могут быть разными.
+2. streams vod_url у одного стрима может быть несколько записей (VOD) на Twitch из за обрыва трансляции. Также могут быть другие источники записей (YouTube, Boosty). Следует добавить таблицы и связи, чтобы предусмотреть этот функционал.
+3. stream_games duration_minutes не должна быть генерируемая, так как источники продолжительности могут быть разными.
+
+

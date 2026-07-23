@@ -5,7 +5,7 @@ from twitchio.ext.commands.errors import CommandNotFound
 
 from core.context import SafeContext
 from core.registry import load_commands
-from config.settings import BOT_PREFIX, TWITCH_CHANNELS, TWITCH_PRIMARY_CHANNEL, TWITCH_NICK, TWITCH_TOKEN
+import config.settings as settings
 from services.eventsub_service import EventSubService
 from services.deferred_service import RecommendationSheetsSyncScheduler
 
@@ -13,10 +13,10 @@ from services.deferred_service import RecommendationSheetsSyncScheduler
 class Bot(commands.Bot):
     def __init__(self):
         super().__init__(
-            token=TWITCH_TOKEN,
-            prefix=BOT_PREFIX,
-            nick=TWITCH_NICK,
-            initial_channels=list(TWITCH_CHANNELS or [TWITCH_PRIMARY_CHANNEL]),
+            token=settings.TWITCH_TOKEN,
+            prefix=settings.BOT_PREFIX,
+            nick=settings.TWITCH_NICK,
+            initial_channels=list(settings.TWITCH_CHANNELS or [settings.TWITCH_PRIMARY_CHANNEL]),
             case_insensitive=True,
         )
 
@@ -35,7 +35,7 @@ class Bot(commands.Bot):
             except Exception as exc:
                 print(f"[EventSub] setup failed: {exc}")
 
-        print(f"Bot connected as {self.nick} to {TWITCH_CHANNELS or [TWITCH_PRIMARY_CHANNEL]}")
+        print(f"Bot connected as {self.nick} to {settings.TWITCH_CHANNELS or [settings.TWITCH_PRIMARY_CHANNEL]}")
         print(f"Commands loaded: {list(self.commands.keys())}")
         print(f"[EventSub] subscriptions: {self.eventsub_service.subscriptions}")
 

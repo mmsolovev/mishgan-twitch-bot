@@ -20,12 +20,12 @@ from typing import Any
 
 import aiohttp
 
-from config.settings import CLIENT_ID, TWITCH_ACCESS_TOKEN, TWITCH_PRIMARY_CHANNEL
+import config.settings as settings
 from database.db import SessionLocal
 from database.models import Game, Stream
 from pipeline.ingest.hltb_client import search_best
 from pipeline.ingest.igdb_api import fetch_igdb_metadata
-from pipeline.ingest.twitch_api import fetch_user_id, fetch_vods
+from pipeline.ingest.twitch_api import TwitchTokenExpiredError, fetch_user_id, fetch_vods
 from pipeline.ingest.twitchtracker_parser import load_games_json, load_streams_json
 from pipeline.load.load_game_stats import sync_game_stats, update_streams_count
 from pipeline.load.load_game_meta import apply_games_meta_patch, select_enrichment_candidates
@@ -86,22 +86,38 @@ def _cache_fresh(entry: Any, *, ttl_days: int) -> bool:
 
 
 async def _sync_vods(session, *, only_stream_ids: set[int] | None = None) -> tuple[int, int]:
-    if not (CLIENT_ID and TWITCH_ACCESS_TOKEN and TWITCH_PRIMARY_CHANNEL):
+    if not (settings.CLIENT_ID and settings.TWITCH_ACCESS_TOKEN and settings.TWITCH_PRIMARY_CHANNEL):
         print("Skipping VOD sync: missing CLIENT_ID/TWITCH_ACCESS_TOKEN/TWITCH_PRIMARY_CHANNEL.")
         return (0, 0)
 
+    from services.token_service import try_refresh_token
+
     timeout = aiohttp.ClientTimeout(total=30)
     async with aiohttp.ClientSession(timeout=timeout) as http:
-        user_id = await fetch_user_id(
-            http,
-            client_id=CLIENT_ID,
-            access_token=TWITCH_ACCESS_TOKEN,
-            channel_login=TWITCH_PRIMARY_CHANNEL,
-        )
+        try:
+            user_id = await fetch_user_id(
+                http,
+                client_id=settings.CLIENT_ID,
+                access_token=settings.TWITCH_ACCESS_TOKEN,
+                channel_login=settings.TWITCH_PRIMARY_CHANNEL,
+            )
+        except TwitchTokenExpiredError:
+            new_token = await try_refresh_token()
+            if not new_token:
+                print("Skipping VOD sync: token refresh failed.")
+                return (0, 0)
+            settings.TWITCH_ACCESS_TOKEN = new_token
+            user_id = await fetch_user_id(
+                http,
+                client_id=settings.CLIENT_ID,
+                access_token=new_token,
+                channel_login=settings.TWITCH_PRIMARY_CHANNEL,
+            )
+
         vods = await fetch_vods(
             http,
-            client_id=CLIENT_ID,
-            access_token=TWITCH_ACCESS_TOKEN,
+            client_id=settings.CLIENT_ID,
+            access_token=settings.TWITCH_ACCESS_TOKEN,
             user_id=user_id,
         )
 
@@ -246,6 +262,15 @@ def _enrich_streams_genres(session, *, only_stream_ids: set[int] | None = None) 
 
 
 async def run() -> int:
+    from services.token_service import ensure_valid_token
+
+    try:
+        new_token = await ensure_valid_token()
+        settings.TWITCH_ACCESS_TOKEN = new_token
+    except RuntimeError as exc:
+        _log(f"Token validation failed: {exc}")
+        return 1
+
     root = _default_project_root()
     streams_json = root / "storage" / "streams.json"
     games_json = root / "storage" / "games.json"

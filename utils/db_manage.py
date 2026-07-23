@@ -17,6 +17,10 @@ Manage rows in the local SQLite DB:
   python utils/db_manage.py --entity recommendation --id 42 --column description_short --apply
   python utils/db_manage.py --entity recommendation --title "Some Game" --column description_short --apply
 
+  # Set a cell to a specific value
+  python utils/db_manage.py --entity recommendation --id 42 --column description_short --set-value "Action RPG" --apply
+  python utils/db_manage.py --entity recommendation --title "Some Game" --column description_short --set-value "Short desc" --apply
+
   # Delete an entire row (single table)
   python utils/db_manage.py --entity stream --id 1266 --delete --apply --backup
   python utils/db_manage.py --entity game --id 123 --delete --apply
@@ -66,7 +70,8 @@ def main() -> None:
     parser.add_argument("--backup", action="store_true", help="Create .bak-* copy of DB before applying.")
 
     parser.add_argument("--entity", choices=["game", "stream", "recommendation", "stream_game"], required=True)
-    parser.add_argument("--column", help="Column name to clear (set to NULL); not needed with --delete")
+    parser.add_argument("--column", help="Column name to clear (set to NULL) or set with --set-value; not needed with --delete")
+    parser.add_argument("--set-value", type=str, help="Set the column to this value instead of NULL (use with --column)")
     parser.add_argument("--delete", action="store_true", help="Delete the entire row instead of clearing a cell")
     parser.add_argument("--cascade", action="store_true", help="Also delete/clean related rows in other tables (only for --entity game --delete)")
 
@@ -80,10 +85,13 @@ def main() -> None:
         raise SystemExit("--title can only be used with --entity recommendation")
 
     if not args.delete and not args.column:
-        raise SystemExit("Provide --column to clear a cell, or --delete to delete the row")
+        raise SystemExit("Provide --column to clear a cell or --set-value to set a value, or --delete to delete the row")
 
     if args.delete and args.column:
-        raise SystemExit("Use either --column (clear cell) or --delete (delete row), not both")
+        raise SystemExit("Use either --column (clear cell or --set-value to set) or --delete (delete row), not both")
+
+    if args.set_value and not args.column:
+        raise SystemExit("--set-value requires --column")
 
     if args.cascade:
         if args.entity != "game" or not args.delete:
@@ -213,7 +221,7 @@ def main() -> None:
                 print("APPLIED (row deleted).")
 
         else:
-            # --- CLEAR-CELL path (original) ---
+            # --- CLEAR-CELL / SET-CELL path ---
             cols = _table_columns(cur, table)
             if args.column not in cols:
                 raise SystemExit(
@@ -227,8 +235,9 @@ def main() -> None:
             if before is None:
                 raise SystemExit(f"Row not found: {table}.{id_col}={id_val}")
 
+            new_value = args.set_value if args.set_value else None
             print(f"Before: {table}.{id_col}={id_val} {args.column}={before[0]!r}")
-            print(f"After:  {table}.{id_col}={id_val} {args.column}=NULL")
+            print(f"After:  {table}.{id_col}={id_val} {args.column}={new_value!r}")
 
             if not args.apply:
                 print("DRY-RUN (no changes written). Use --apply to write.")
@@ -240,8 +249,8 @@ def main() -> None:
 
             con.execute("BEGIN")
             cur.execute(
-                f"UPDATE {table} SET {args.column} = NULL WHERE {id_col} = ?",
-                params,
+                f"UPDATE {table} SET {args.column} = ? WHERE {id_col} = ?",
+                (new_value, id_val),
             )
             con.commit()
             print("APPLIED.")

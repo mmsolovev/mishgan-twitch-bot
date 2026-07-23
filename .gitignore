@@ -240,3 +240,4 @@ __marimo__/
 /storage/movies/lost_state.json
 !/storage/movies/*.example.json
 /har_and_cookies/.models/
+/storage/db_project.txt

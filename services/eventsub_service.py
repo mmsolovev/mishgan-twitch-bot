@@ -6,7 +6,7 @@ import time
 from twitchio.ext.eventsub.websocket import EventSubWSClient
 from twitchio.http import Route
 
-from config.settings import BOT_ID, GAMES_SHEET_URL, TWITCH_ACCESS_TOKEN, TWITCH_PRIMARY_CHANNEL, TWITCH_NICK
+import config.settings as settings
 from services.games_service import find_game_lookup
 from services.hltb_service import get_hltb_summary
 from runtime.collector import RuntimeStreamCollector
@@ -38,7 +38,7 @@ class EventSubService:
         }
 
     async def setup(self):
-        if not TWITCH_ACCESS_TOKEN:
+        if not settings.TWITCH_ACCESS_TOKEN:
             print("[EventSub] skipped: TWITCH_TOKEN is missing")
             return
 
@@ -46,7 +46,7 @@ class EventSubService:
         self.broadcaster_id = int(target_user.id)
         self.moderator_id = int(bot_user.id)
         await self.prime_channel_state(target_user.id)
-        await self.collector.bootstrap(target_user.id, TWITCH_ACCESS_TOKEN)
+        await self.collector.bootstrap(target_user.id, settings.TWITCH_ACCESS_TOKEN)
         results = await self.subscribe_topics(target_user.id, bot_user.id)
 
         self.connected = any(results.values())
@@ -59,30 +59,30 @@ class EventSubService:
 
     async def resolve_users(self):
         users = await self.bot.fetch_users(
-            names=[TWITCH_PRIMARY_CHANNEL, TWITCH_NICK],
-            token=TWITCH_ACCESS_TOKEN,
+            names=[settings.TWITCH_PRIMARY_CHANNEL, settings.TWITCH_NICK],
+            token=settings.TWITCH_ACCESS_TOKEN,
             force=True,
         )
 
         by_name = {user.name.lower(): user for user in users}
-        target_user = by_name.get(TWITCH_PRIMARY_CHANNEL.lower())
-        bot_user = by_name.get(TWITCH_NICK.lower())
+        target_user = by_name.get(settings.TWITCH_PRIMARY_CHANNEL.lower())
+        bot_user = by_name.get(settings.TWITCH_NICK.lower())
 
         if not target_user:
-            raise RuntimeError(f"Target channel '{TWITCH_PRIMARY_CHANNEL}' was not found")
+            raise RuntimeError(f"Target channel '{settings.TWITCH_PRIMARY_CHANNEL}' was not found")
 
         if not bot_user:
-            raise RuntimeError(f"Bot account '{TWITCH_NICK}' was not found")
+            raise RuntimeError(f"Bot account '{settings.TWITCH_NICK}' was not found")
 
-        if BOT_ID and str(bot_user.id) != str(BOT_ID):
+        if settings.BOT_ID and str(bot_user.id) != str(settings.BOT_ID):
             raise RuntimeError(
-                f"BOT_ID mismatch: .env has {BOT_ID}, but Twitch API returned {bot_user.id} for {TWITCH_NICK}"
+                f"settings.BOT_ID mismatch: .env has {settings.BOT_ID}, but Twitch API returned {bot_user.id} for {settings.TWITCH_NICK}"
             )
 
         return target_user, bot_user
 
     async def prime_channel_state(self, broadcaster_id: int):
-        channel_info = await self.bot.fetch_channel(str(broadcaster_id), token=TWITCH_ACCESS_TOKEN)
+        channel_info = await self.bot.fetch_channel(str(broadcaster_id), token=settings.TWITCH_ACCESS_TOKEN)
         self.channel_state = {
             "title": channel_info.title,
             "category_name": channel_info.game_name,
@@ -91,31 +91,31 @@ class EventSubService:
 
     async def subscribe_topics(self, broadcaster_id: int, moderator_id: int):
         subscriptions = {
-            "channel.update": lambda: self.client.subscribe_channel_update(broadcaster_id, TWITCH_ACCESS_TOKEN),
+            "channel.update": lambda: self.client.subscribe_channel_update(broadcaster_id, settings.TWITCH_ACCESS_TOKEN),
             "stream.online": lambda: self.client.subscribe_channel_stream_start(
-                broadcaster_id, TWITCH_ACCESS_TOKEN
+                broadcaster_id, settings.TWITCH_ACCESS_TOKEN
             ),
             "stream.offline": lambda: self.client.subscribe_channel_stream_end(
-                broadcaster_id, TWITCH_ACCESS_TOKEN
+                broadcaster_id, settings.TWITCH_ACCESS_TOKEN
             ),
             "channel.raid.to": lambda: self.client.subscribe_channel_raid(
-                TWITCH_ACCESS_TOKEN,
+                settings.TWITCH_ACCESS_TOKEN,
                 to_broadcaster=broadcaster_id,
             ),
             "channel.follow.v2": lambda: self.client.subscribe_channel_follows_v2(
                 broadcaster_id,
                 moderator_id,
-                TWITCH_ACCESS_TOKEN,
+                settings.TWITCH_ACCESS_TOKEN,
             ),
             "channel.shoutout.create": lambda: self.client.subscribe_channel_shoutout_create(
                 broadcaster_id,
                 moderator_id,
-                TWITCH_ACCESS_TOKEN,
+                settings.TWITCH_ACCESS_TOKEN,
             ),
             "channel.shoutout.receive": lambda: self.client.subscribe_channel_shoutout_receive(
                 broadcaster_id,
                 moderator_id,
-                TWITCH_ACCESS_TOKEN,
+                settings.TWITCH_ACCESS_TOKEN,
             ),
         }
 
@@ -237,7 +237,7 @@ class EventSubService:
             self.logger.info("[EventSub] shoutout skipped for %s: viewer_count < 50", raider_login)
             return
 
-        if raider_login == TWITCH_PRIMARY_CHANNEL.lower():
+        if raider_login == settings.TWITCH_PRIMARY_CHANNEL.lower():
             self.logger.info("[EventSub] shoutout skipped for %s: same as target channel", raider_login)
             return
 
@@ -283,7 +283,7 @@ class EventSubService:
                 ("to_broadcaster_id", str(to_broadcaster_id)),
                 ("moderator_id", str(self.moderator_id)),
             ],
-            token=TWITCH_ACCESS_TOKEN,
+            token=settings.TWITCH_ACCESS_TOKEN,
         )
 
         try:
@@ -295,11 +295,11 @@ class EventSubService:
             ) from exc
 
     async def announce_game_change(self, game_name: str):
-        channel = self.bot.get_channel(TWITCH_PRIMARY_CHANNEL)
+        channel = self.bot.get_channel(settings.TWITCH_PRIMARY_CHANNEL)
         if not channel:
             self.logger.info(
                 "[EventSub] game-change message skipped: channel %s is not available",
-                TWITCH_PRIMARY_CHANNEL,
+                settings.TWITCH_PRIMARY_CHANNEL,
             )
             return
 
@@ -326,8 +326,8 @@ class EventSubService:
             if formatted_hltb:
                 message_parts.append(formatted_hltb)
 
-        if GAMES_SHEET_URL:
-            message_parts.append(f"Все игры канала: {GAMES_SHEET_URL}")
+        if settings.GAMES_SHEET_URL:
+            message_parts.append(f"Все игры канала: {settings.GAMES_SHEET_URL}")
 
         return " | ".join(message_parts)
 
@@ -406,8 +406,8 @@ class EventSubService:
 
     async def fetch_live_stream_snapshot(self):
         streams = await self.bot.fetch_streams(
-            user_logins=[TWITCH_PRIMARY_CHANNEL],
-            token=TWITCH_ACCESS_TOKEN,
+            user_logins=[settings.TWITCH_PRIMARY_CHANNEL],
+            token=settings.TWITCH_ACCESS_TOKEN,
             type="live",
         )
         return streams[0] if streams else None

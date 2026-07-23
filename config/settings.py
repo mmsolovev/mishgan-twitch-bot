@@ -6,6 +6,7 @@ load_dotenv()
 
 TWITCH_TOKEN = os.getenv("TWITCH_TOKEN")
 TWITCH_ACCESS_TOKEN = TWITCH_TOKEN.removeprefix("oauth:") if TWITCH_TOKEN else None
+TWITCH_REFRESH_TOKEN = os.getenv("TWITCH_REFRESH_TOKEN")
 TWITCH_NICK = os.getenv("TWITCH_NICK")
 TWITCH_CHANNEL = os.getenv("TWITCH_CHANNEL")
 
