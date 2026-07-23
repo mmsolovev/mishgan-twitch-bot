@@ -2,7 +2,7 @@ import asyncio
 from copy import deepcopy
 from datetime import datetime, timezone
 
-from config.settings import STREAM_RUNTIME_SAMPLE_SECONDS, TWITCH_ACCESS_TOKEN, TWITCH_PRIMARY_CHANNEL
+import config.settings as settings
 from runtime import sampler, storage
 from runtime.metrics import recalculate_all_metrics
 from runtime.session import (
@@ -25,8 +25,7 @@ class RuntimeStreamCollector:
         self.logger = get_logger("runtime.collector")
         self.broadcaster_id: int | None = None
         self.active_session: StreamSession | None = None
-        self.token = TWITCH_ACCESS_TOKEN
-        self.sample_interval_seconds = STREAM_RUNTIME_SAMPLE_SECONDS
+        self.sample_interval_seconds = settings.STREAM_RUNTIME_SAMPLE_SECONDS
         self.sampling_task: asyncio.Task | None = None
         self.followers_sampling_enabled = True
 
@@ -34,11 +33,10 @@ class RuntimeStreamCollector:
 
     async def bootstrap(self, broadcaster_id: int, token: str):
         self.broadcaster_id = int(broadcaster_id)
-        self.token = token
         self.active_session = storage.load_active_session()
         ensure_session_shape(self.active_session)
 
-        live_stream = await sampler.fetch_live_stream(self.bot, self.token)
+        live_stream = await sampler.fetch_live_stream_with_refresh(self.bot, settings.TWITCH_ACCESS_TOKEN)
         if self.active_session and live_stream and str(self.active_session.get("stream_id")) == str(live_stream.id):
             self.logger.info("Recovered active session for current live stream %s", live_stream.id)
             self._record_event("collector.bootstrap.recovered", {"stream_id": str(live_stream.id)})
@@ -323,7 +321,7 @@ class RuntimeStreamCollector:
         current_stream = stream_snapshot
         if current_stream is None:
             try:
-                current_stream = await sampler.fetch_live_stream(self.bot, self.token)
+                current_stream = await sampler.fetch_live_stream_with_refresh(self.bot, settings.TWITCH_ACCESS_TOKEN)
             except Exception as exc:
                 self.logger.warning("Failed to fetch live stream snapshot for %s: %s", reason, exc)
                 current_stream = None
@@ -341,7 +339,7 @@ class RuntimeStreamCollector:
             self.logger.info("Live stream snapshot unavailable for %s", reason)
 
         if self.followers_sampling_enabled:
-            follower_count = await sampler.fetch_followers_count(self.bot, self.broadcaster_id, self.token)
+            follower_count = await sampler.fetch_followers_count(self.bot, self.broadcaster_id, settings.TWITCH_ACCESS_TOKEN)
             if follower_count is not None:
                 self._append_follower_sample(follower_count, sample_timestamp, reason)
             else:

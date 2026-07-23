@@ -13,6 +13,10 @@ import aiohttp
 TWITCH_API = "https://api.twitch.tv/helix"
 
 
+class TwitchTokenExpiredError(Exception):
+    pass
+
+
 def _headers(*, client_id: str, access_token: str) -> dict[str, str]:
     return {
         "Client-ID": client_id,
@@ -33,6 +37,8 @@ async def fetch_user_id(
         headers=_headers(client_id=client_id, access_token=access_token),
         params=params,
     ) as resp:
+        if resp.status == 401:
+            raise TwitchTokenExpiredError("Twitch API returned 401 Unauthorized for /users")
         data: dict[str, Any] = await resp.json()
 
     rows = data.get("data") or []
@@ -71,6 +77,8 @@ async def fetch_vods(
             headers=_headers(client_id=client_id, access_token=access_token),
             params=params,
         ) as resp:
+            if resp.status == 401:
+                raise TwitchTokenExpiredError("Twitch API returned 401 Unauthorized for /videos")
             data: dict[str, Any] = await resp.json()
 
         vods.extend(list(data.get("data") or []))

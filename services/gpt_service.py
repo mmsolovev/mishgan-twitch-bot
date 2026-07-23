@@ -25,7 +25,7 @@ async def ask_gpt(prompt: str) -> str:
 
     def sync_request():
         return ChatCompletion.create(
-            model="gpt-3.5-turbo",
+            model="",
             messages=[
                 {
                     "role": "system",
