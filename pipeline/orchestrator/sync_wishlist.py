@@ -15,14 +15,13 @@ from pathlib import Path
 from bs4 import BeautifulSoup
 
 from database.db import SessionLocal
+from database.models import RecommendedGame
 from pipeline.ingest.igdb_api import fetch_recommendation_metadata
 from pipeline.load.load_recommendations import (
     add_vote,
     create_recommendation,
-    find_existing_recommendation,
     sync_recommendation_matches,
 )
-from pipeline.transform.recommendations_transform import normalize_recommendation_name
 from utils.logger import get_logger
 
 WISHLIST_HTML_PATH = Path(__file__).resolve().parent.parent.parent / "storage" / "pages" / "steam_wishlist.html"
@@ -36,18 +35,33 @@ def _extract_app_id(steam_url: str) -> str | None:
     return match.group(1) if match else None
 
 
+def _is_english_name(name: str) -> bool:
+    alpha = [c for c in name if c.isalpha()]
+    if not alpha:
+        return False
+    ascii_count = sum(1 for c in alpha if c.isascii())
+    return ascii_count / len(alpha) >= 0.8
+
+
 def _parse_wishlist_items(html_content: str) -> list[dict]:
     soup = BeautifulSoup(html_content, "html.parser")
     items = []
-    for link in soup.select("a.pOyXxbQoV38-"):
+    seen_app_ids: set[str] = set()
+    for link in soup.select("a.pOyXxbQoV38-, a.I8vuMMV-osE-"):
         name = link.get_text(strip=True)
         href = link.get("href", "").strip()
-        if name and href:
-            items.append({
-                "name": name,
-                "steam_url": href,
-                "app_id": _extract_app_id(href),
-            })
+        if not name or not href:
+            continue
+        app_id = _extract_app_id(href)
+        if app_id and app_id in seen_app_ids:
+            continue
+        if app_id:
+            seen_app_ids.add(app_id)
+        items.append({
+            "name": name,
+            "steam_url": href,
+            "app_id": app_id,
+        })
     return items
 
 
@@ -83,20 +97,6 @@ async def _process_single_game(
             index, total, name, app_id, metadata.steam_url,
         )
         return "skipped (Steam URL mismatch)"
-
-    existing = find_existing_recommendation(
-        session,
-        query=name,
-        metadata_title=metadata.title,
-        source_name=metadata.source_name,
-        source_game_id=metadata.source_game_id,
-    )
-    if existing:
-        logger.info(
-            "[%d/%d] Already exists: '%s' (source=%s, source_game_id=%s)",
-            index, total, existing.title, existing.source_name, existing.source_game_id,
-        )
-        return "skipped (already exists)"
 
     recommendation = create_recommendation(
         session,
@@ -149,11 +149,38 @@ async def _sync_all():
 
     session = SessionLocal()
     try:
+        existing_app_ids = {
+            _extract_app_id(url)
+            for (url,) in session.query(RecommendedGame.steam_url).all()
+            if url
+        }
+        existing_app_ids.discard(None)
+
+        pending = []
+        skipped_existing = 0
+        skipped_non_english = 0
+        for item in items:
+            if item["app_id"] and item["app_id"] in existing_app_ids:
+                skipped_existing += 1
+                continue
+            if not _is_english_name(item["name"]):
+                skipped_non_english += 1
+                continue
+            pending.append(item)
+
+        logger.info(
+            "Pre-filter: %d already in DB, %d non-English, %d pending IGDB lookup",
+            skipped_existing, skipped_non_english, len(pending),
+        )
+
+        if not pending:
+            return
+
         stats = {"added": 0, "skipped": 0, "errors": 0}
 
-        for idx, item in enumerate(items, start=1):
+        for idx, item in enumerate(pending, start=1):
             try:
-                result = await _process_single_game(session, item, logger, idx, len(items))
+                result = await _process_single_game(session, item, logger, idx, len(pending))
                 if result == "added":
                     stats["added"] += 1
                 else:
@@ -162,7 +189,7 @@ async def _sync_all():
                 session.rollback()
                 logger.exception(
                     "[%d/%d] Error processing '%s': %s",
-                    idx, len(items), item["name"], exc,
+                    idx, len(pending), item["name"], exc,
                 )
                 stats["errors"] += 1
 
