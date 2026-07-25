@@ -122,16 +122,20 @@ async def _igdb_query(state: _IGDBLoopState, session: aiohttp.ClientSession, bod
         headers = await build_igdb_auth_headers()
 
         for attempt in range(1, 6):
-            async with session.post(IGDB_GAMES_URL, data=body.encode("utf-8"), headers=headers) as resp:
-                # Handle token expiration / 429 / transient 5xx
-                if resp.status == 401:
-                    headers = await build_igdb_auth_headers(force_refresh=True)
-                    continue
-                if resp.status == 429 or resp.status >= 500:
-                    await asyncio.sleep(min(5.0, 0.25 * (2**attempt)) + random.random() * 0.1)
-                    continue
+            try:
+                async with session.post(IGDB_GAMES_URL, data=body.encode("utf-8"), headers=headers) as resp:
+                    # Handle token expiration / 429 / transient 5xx
+                    if resp.status == 401:
+                        headers = await build_igdb_auth_headers(force_refresh=True)
+                        continue
+                    if resp.status == 429 or resp.status >= 500:
+                        await asyncio.sleep(min(5.0, 0.25 * (2**attempt)) + random.random() * 0.1)
+                        continue
 
-                data = await resp.json()
+                    data = await resp.json()
+            except (asyncio.TimeoutError, aiohttp.ClientError):
+                await asyncio.sleep(min(5.0, 0.25 * (2**attempt)) + random.random() * 0.1)
+                continue
 
             if isinstance(data, list):
                 return [d for d in data if isinstance(d, dict)]
@@ -158,7 +162,7 @@ async def fetch_recommendation_metadata(search_query: str) -> RecommendationMeta
     if inflight is not None:
         return await inflight
 
-    timeout = aiohttp.ClientTimeout(total=15)
+    timeout = aiohttp.ClientTimeout(total=30)
 
     async def _do_fetch() -> RecommendationMetadata | None:
         async with aiohttp.ClientSession(timeout=timeout) as session:
@@ -217,7 +221,7 @@ async def fetch_top_upcoming_games(limit: int = 15) -> list[RecommendationMetada
     month_later = now + 30 * 24 * 60 * 60
 
     state = _get_state()
-    timeout = aiohttp.ClientTimeout(total=15)
+    timeout = aiohttp.ClientTimeout(total=30)
 
     async with aiohttp.ClientSession(timeout=timeout) as session:
         body = f"""
@@ -288,7 +292,7 @@ async def fetch_games_by_ids(game_ids: list[str]) -> list[dict]:
         return []
 
     state = _get_state()
-    timeout = aiohttp.ClientTimeout(total=15)
+    timeout = aiohttp.ClientTimeout(total=30)
 
     async with aiohttp.ClientSession(timeout=timeout) as session:
         # IGDB allows up to 500 IDs per request
