@@ -30,6 +30,6 @@ def setup(bot):
         if not check_user_cooldown(ctx, "игры_search", 1):
             return
         await human_delay()
-        await ctx.send(build_game_response(cleaned_game))
+        await ctx.send(await build_game_response(cleaned_game))
 
     bot.add_command(games_command)

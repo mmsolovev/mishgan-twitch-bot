@@ -1,7 +1,9 @@
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timezone
 
-from sqlalchemy.orm import joinedload
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 
 from config.settings import (
     ADMINS,
@@ -11,19 +13,20 @@ from config.settings import (
     RECOMMENDATIONS_LIMIT,
     RECOMMENDATIONS_STREAMER_LOGIN,
 )
-from database.db import SessionLocal
-from database.models import Game, RecommendedGame, RecommendedGameVote
+from database.db import AsyncSessionLocal
+from database.models import Game, GameMetadataIGDB, User, game_recommendations, streamer_games
 from services.games_service import build_game_response, find_game_lookup
 from pipeline.ingest.igdb_api import fetch_recommendation_metadata
 from pipeline.load.load_recommendations import (
-    add_vote as _db_add_vote,
-    create_recommendation as _db_create_recommendation,
-    find_existing_recommendation as _db_find_existing_recommendation,
-    find_recommendation_by_query as _db_find_recommendation_by_query,
-    find_user_vote_for_recommendation as _db_find_user_vote_for_recommendation,
-    load_user_active_votes as _db_load_user_active_votes,
-    remove_vote as _db_remove_vote,
-    sync_recommendation_matches as _db_sync_recommendation_matches,
+    add_recommendation as _db_add_recommendation,
+    create_game as _db_create_game,
+    create_game_with_igdb as _db_create_game_with_igdb,
+    find_game_by_query as _db_find_game_by_query,
+    find_user_recommendation as _db_find_user_recommendation,
+    load_user_recommendations as _db_load_user_recommendations,
+    remove_recommendation as _db_remove_recommendation,
+    set_streamer_interested as _db_set_streamer_interested,
+    add_igdb_note as _db_add_igdb_note,
 )
 from pipeline.transform.recommendations_transform import (
     normalize_recommendation_name as _tx_normalize_recommendation_name,
@@ -37,9 +40,6 @@ STATUS_STREAMED = "streamed"
 STATUS_REJECTED = "rejected"
 STATUS_NOT_FOUND = "not_found"
 
-RELEASE_PRECISION_UNKNOWN = "unknown"
-RELEASE_PRECISION_DAY = "day"
-RELEASE_PRECISION_MINUTE = "minute"
 ACTIVE_RECOMMENDATION_STATUSES = {STATUS_UPCOMING, STATUS_RELEASED}
 ADMIN_DELETE_ALL_MARKERS = {"*", "all", "все"}
 
@@ -51,9 +51,8 @@ class RecommendationSummary:
     status: str
     release_date: datetime | None
     steam_url: str | None
-    rating_text: str | None
-    platforms_text: str | None
-    genres_text: str | None
+    igdb_score: float | None
+    cover_url: str | None
     recommenders: list[str]
     votes_count: int
 
@@ -88,91 +87,68 @@ def normalize_recommendation_name(value: str) -> str:
     return _tx_normalize_recommendation_name(value)
 
 
-def find_recommendation_by_query(session, query: str) -> RecommendedGame | None:
-    return _db_find_recommendation_by_query(session, query)
-
-
-def add_vote(
-    session,
-    recommendation: RecommendedGame,
-    user_login: str,
-    user_display_name: str,
-    created_at: datetime | None = None,
-) -> bool:
-    return _db_add_vote(
-        session,
-        recommendation,
-        user_login,
-        user_display_name,
-        created_at=created_at,
+async def _get_game_recommenders(session: AsyncSession, game_id: int) -> list[str]:
+    result = await session.execute(
+        select(User.login)
+        .join(game_recommendations, game_recommendations.c.user_id == User.id)
+        .where(game_recommendations.c.game_id == game_id)
     )
+    return [row[0] for row in result.all()]
 
 
-def create_recommendation(
-    session,
-    query_name: str,
-    title: str,
-    *,
-    release_date: datetime | None = None,
-    release_precision: str = RELEASE_PRECISION_UNKNOWN,
-    description_short: str | None = None,
-    steam_url: str | None = None,
-    rating_text: str | None = None,
-    platforms_text: str | None = None,
-    genres_text: str | None = None,
-    cover_url: str | None = None,
-    source_name: str | None = None,
-    source_game_id: str | None = None,
-    source_payload: str | None = None,
-    status: str | None = None,
-) -> RecommendedGame:
-    return _db_create_recommendation(
-        session,
-        query_name,
-        title,
-        release_date=release_date,
-        release_precision=release_precision,
-        description_short=description_short,
-        steam_url=steam_url,
-        rating_text=rating_text,
-        platforms_text=platforms_text,
-        genres_text=genres_text,
-        cover_url=cover_url,
-        source_name=source_name,
-        source_game_id=source_game_id,
-        source_payload=source_payload,
-        status=status,
+async def _get_recommenders_count(session: AsyncSession, game_id: int) -> int:
+    result = await session.execute(
+        select(game_recommendations).where(game_recommendations.c.game_id == game_id)
     )
+    return len(result.all())
 
 
-def sync_recommendation_matches(session) -> int:
-    return _db_sync_recommendation_matches(session)
+async def build_recommendation_summary(session: AsyncSession, game: Game) -> RecommendationSummary:
+    recommenders = await _get_game_recommenders(session, game.id)
+    votes_count = await _get_recommenders_count(session, game.id)
 
+    release_date = None
+    steam_url = None
+    igdb_score = None
+    cover_url = None
 
-def refresh_recommendation_lifecycle() -> int:
-    session = SessionLocal()
-    try:
-        updated_count = sync_recommendation_matches(session)
-        session.commit()
-        return updated_count
-    finally:
-        session.close()
+    if game.igdb_metadata:
+        release_date = game.igdb_metadata.release_date
+        steam_url = game.igdb_metadata.steam_url
+        igdb_score = game.igdb_metadata.igdb_score
+        cover_url = game.igdb_metadata.cover_url
 
+    is_streamed = await _check_if_streamed(session, game.name)
 
-def build_recommendation_summary(recommendation: RecommendedGame) -> RecommendationSummary:
-    recommenders = [vote.user_display_name for vote in recommendation.votes]
+    if is_streamed:
+        status = STATUS_STREAMED
+    elif release_date and release_date > datetime.now(timezone.utc):
+        status = STATUS_UPCOMING
+    else:
+        status = STATUS_RELEASED
+
     return RecommendationSummary(
-        id=recommendation.id,
-        title=recommendation.title,
-        status=recommendation.status,
-        release_date=recommendation.release_date,
-        steam_url=recommendation.steam_url,
-        rating_text=recommendation.rating_text,
-        platforms_text=recommendation.platforms_text,
-        genres_text=recommendation.genres_text,
+        id=game.id,
+        title=game.name,
+        status=status,
+        release_date=release_date,
+        steam_url=steam_url,
+        igdb_score=igdb_score,
+        cover_url=cover_url,
         recommenders=recommenders,
-        votes_count=len(recommenders),
+        votes_count=votes_count,
     )
+
+
+async def _check_if_streamed(session: AsyncSession, game_name: str) -> bool:
+    from database.models import StreamGame
+    result = await session.execute(
+        select(StreamGame)
+        .join(Game, Game.id == StreamGame.game_id)
+        .where(Game.name == game_name)
+        .limit(1)
+    )
+    return result.scalar_one_or_none() is not None
 
 
 def _user_is_privileged(user_login: str) -> bool:
@@ -194,85 +170,23 @@ def _user_is_banned(user_login: str) -> bool:
     return _normalize_user_login(user_login) in RECOMMENDATIONS_BANNED_USERS
 
 
-def _find_existing_recommendation(
-    session,
-    query: str,
-    metadata_title: str | None = None,
-    source_name: str | None = None,
-    source_game_id: str | None = None,
-) -> RecommendedGame | None:
-    return _db_find_existing_recommendation(
-        session,
-        query=query,
-        metadata_title=metadata_title,
-        source_name=source_name,
-        source_game_id=source_game_id,
-    )
-
-
-def _find_streamed_game_match(query: str):
-    return find_game_lookup(query)
-
-
 def _is_streamer_recommendation(user_login: str) -> bool:
     return _normalize_user_login(user_login) == _normalize_user_login(RECOMMENDATIONS_STREAMER_LOGIN)
 
 
-def _set_streamer_interested(recommendation: RecommendedGame, interested: bool) -> bool:
-    changed = bool(recommendation.streamer_interested) != bool(interested)
-    recommendation.streamer_interested = bool(interested)
-    if changed:
-        recommendation.updated_at = datetime.utcnow()
-    return changed
+async def _find_streamed_game_match(query: str):
+    return await find_game_lookup(query)
 
 
-def _remove_streamer_vote_if_present(session, recommendation: RecommendedGame) -> bool:
-    streamer_vote = _find_user_vote_for_recommendation(session, recommendation.id, RECOMMENDATIONS_STREAMER_LOGIN)
-    if not streamer_vote:
-        return False
-
-    session.delete(streamer_vote)
-    session.flush()
-    recommendation.updated_at = datetime.utcnow()
-    return True
-
-
-def _delete_recommendation_if_orphaned(session, recommendation: RecommendedGame) -> bool:
-    refreshed = (
-        session.query(RecommendedGame)
-        .options(joinedload(RecommendedGame.votes))
-        .filter_by(id=recommendation.id)
-        .first()
-    )
-    if refreshed and not refreshed.votes:
-        session.delete(refreshed)
-        session.flush()
-        return True
-    return False
-
-
-def _remove_vote(session, vote: RecommendedGameVote) -> tuple[str, bool]:
-    return _db_remove_vote(session, vote)
-
-
-def _find_user_vote_for_recommendation(session, recommendation_id: int, user_login: str) -> RecommendedGameVote | None:
-    return _db_find_user_vote_for_recommendation(session, recommendation_id, user_login)
-
-
-def _load_user_active_votes(session, user_login: str) -> list[RecommendedGameVote]:
-    return _db_load_user_active_votes(session, user_login)
-
-
-def _enforce_user_limit(session, user_login: str) -> str | None:
+async def _enforce_user_limit(session: AsyncSession, user_login: str) -> str | None:
     if _user_is_privileged(user_login):
         return None
-
-    active_votes = _load_user_active_votes(session, user_login)
+    active_votes = await _db_load_user_recommendations(session, user_login)
     if len(active_votes) < RECOMMENDATIONS_LIMIT:
         return None
-
-    oldest_vote = active_votes[0]
-    removed_title, _ = _remove_vote(session, oldest_vote)
+    oldest = active_votes[0]
+    removed_title = oldest.get("name", "")
+    await _db_remove_recommendation(session, oldest["user_id"], oldest["game_id"])
     return removed_title
 
 
@@ -317,25 +231,22 @@ async def recommend_game(query: str, user_login: str, user_display_name: str) ->
     if _user_is_banned(user_login):
         return _make_fake_add_result(query)
 
-    streamed_match = _find_streamed_game_match(query)
+    streamed_match = await _find_streamed_game_match(query)
     streamer_mode = _is_streamer_recommendation(user_login)
     if streamed_match is not None and not streamer_mode:
-        return _make_result("already_streamed", f"Уже была на стримах {build_game_response(query)}")
+        return _make_result("already_streamed", f"Уже была на стримах {await build_game_response(query)}")
 
-    session = SessionLocal()
-    try:
-        existing = _find_existing_recommendation(session, query)
+    async with AsyncSessionLocal() as session:
+        existing = await _db_find_game_by_query(session, query)
         if existing:
+            user_rec = await _db_find_user_recommendation(session, existing.id, user_login)
+            if user_rec:
+                return _make_result("duplicate_vote", f"Уже рекомендована «{existing.name}».")
 
-            existing_vote = _find_user_vote_for_recommendation(session, existing.id, user_login)
-            if existing_vote:
-                return _make_result("duplicate_vote", f"Уже рекомендована «{existing.title}».")
-
-            removed_title = _enforce_user_limit(session, user_login)
-            add_vote(session, existing, user_login, user_display_name)
-            sync_recommendation_matches(session)
-            session.commit()
-            summary = build_recommendation_summary(existing)
+            removed_title = await _enforce_user_limit(session, user_login)
+            await _db_add_recommendation(session, existing, user_login)
+            await session.commit()
+            summary = await build_recommendation_summary(session, existing)
             return _make_result(
                 "voted",
                 _format_add_message(summary.title, removed_title=removed_title, already_existing=True),
@@ -350,28 +261,20 @@ async def recommend_game(query: str, user_login: str, user_display_name: str) ->
                 f"Не удалось найти игру «{query}». Название лучше писать максимально точное.",
             )
 
-        metadata_streamed_match = _find_streamed_game_match(metadata.title)
+        metadata_streamed_match = await _find_streamed_game_match(metadata.title)
         if metadata_streamed_match is not None and not streamer_mode:
-            return _make_result("already_streamed", f"Уже была на стримах {build_game_response(query)}")
+            return _make_result("already_streamed", f"Уже была на стримах {await build_game_response(query)}")
 
-        existing = _find_existing_recommendation(
-            session,
-            query=query,
-            metadata_title=metadata.title,
-            source_name=metadata.source_name,
-            source_game_id=metadata.source_game_id,
-        )
+        existing = await _db_find_game_by_query(session, metadata.title)
         if existing:
+            user_rec = await _db_find_user_recommendation(session, existing.id, user_login)
+            if user_rec:
+                return _make_result("duplicate_vote", f"Уже рекомендована «{existing.name}».")
 
-            existing_vote = _find_user_vote_for_recommendation(session, existing.id, user_login)
-            if existing_vote:
-                return _make_result("duplicate_vote", f"Уже рекомендована «{existing.title}».")
-
-            removed_title = _enforce_user_limit(session, user_login)
-            add_vote(session, existing, user_login, user_display_name)
-            sync_recommendation_matches(session)
-            session.commit()
-            summary = build_recommendation_summary(existing)
+            removed_title = await _enforce_user_limit(session, user_login)
+            await _db_add_recommendation(session, existing, user_login)
+            await session.commit()
+            summary = await build_recommendation_summary(session, existing)
             return _make_result(
                 "voted",
                 _format_add_message(summary.title, removed_title=removed_title, already_existing=True),
@@ -379,69 +282,71 @@ async def recommend_game(query: str, user_login: str, user_display_name: str) ->
                 accepted=True,
             )
 
-        removed_title = _enforce_user_limit(session, user_login)
-        recommendation = create_recommendation(
+        removed_title = await _enforce_user_limit(session, user_login)
+        game = await _db_create_game_with_igdb(
             session,
-            query_name=query,
-            title=metadata.title,
+            name=metadata.title,
+            igdb_id=metadata.source_game_id,
             release_date=metadata.release_date,
-            release_precision=metadata.release_precision,
-            description_short=metadata.description_short,
             steam_url=metadata.steam_url,
-            rating_text=metadata.rating_text,
-            platforms_text=metadata.platforms_text,
-            genres_text=metadata.genres_text,
+            igdb_score=_parse_igdb_score(metadata.rating_text),
+            description_ru=metadata.description_short,
             cover_url=metadata.cover_url,
-            source_name=metadata.source_name,
-            source_game_id=metadata.source_game_id,
-            source_payload=metadata.source_payload,
+            raw_payload=metadata.source_payload,
         )
-        add_vote(session, recommendation, user_login, user_display_name)
+        await _db_add_recommendation(session, game, user_login)
+        if metadata.source_name == "igdb":
+            await _db_add_igdb_note(session, game.id, user_login="igdb")
 
-        if metadata_streamed_match is not None:
-            matched_game = session.query(Game).filter_by(name=metadata_streamed_match.name).first()
-            recommendation.matched_game = matched_game
+        if _is_streamer_recommendation(user_login):
+            await _db_set_streamer_interested(session, game.id, user_login, True)
 
-        sync_recommendation_matches(session)
-        session.commit()
-        summary = build_recommendation_summary(recommendation)
+        await session.commit()
+        summary = await build_recommendation_summary(session, game)
         return _make_result(
             "created",
             _format_add_message(summary.title, removed_title=removed_title),
             recommendation=summary,
             accepted=True,
         )
-    finally:
-        session.close()
+
+
+def _parse_igdb_score(rating_text: str | None) -> float | None:
+    if not rating_text:
+        return None
+    import re
+    match = re.search(r"(\d+(?:\.\d+)?)", rating_text)
+    if match:
+        return float(match.group(1))
+    return None
 
 
 async def delete_own_last_recommendation(user_login: str) -> RecommendationActionResult:
     if _user_is_banned(user_login):
         return _make_fake_delete_result()
 
-    session = SessionLocal()
-    try:
-        vote = (
-            session.query(RecommendedGameVote)
-            .join(RecommendedGame, RecommendedGame.id == RecommendedGameVote.recommended_game_id)
-            .options(joinedload(RecommendedGameVote.recommended_game))
-            .filter(
-                RecommendedGameVote.user_login == _normalize_user_login(user_login),
-                RecommendedGame.status.in_(ACTIVE_RECOMMENDATION_STATUSES),
-            )
-            .order_by(RecommendedGameVote.created_at.desc(), RecommendedGameVote.id.desc())
-            .first()
-        )
-        if not vote:
+    async with AsyncSessionLocal() as session:
+        user = await _get_user(session, user_login)
+        if not user:
             return _make_result("not_found", "Нет активных рекомендаций.")
 
-        title, deleted_recommendation = _remove_vote(session, vote)
-        sync_recommendation_matches(session)
-        session.commit()
-        suffix = " Игра убрана полностью" if deleted_recommendation else ""
-        return _make_result("deleted", f"Последняя рекомендация по игре «{title}» удалена.{suffix}")
-    finally:
-        session.close()
+        result = await session.execute(
+            select(game_recommendations, Game)
+            .join(Game, Game.id == game_recommendations.c.game_id)
+            .where(game_recommendations.c.user_id == user.id)
+            .order_by(game_recommendations.c.created_at.desc())
+            .limit(1)
+        )
+        row = result.first()
+        if not row:
+            return _make_result("not_found", "Нет активных рекомендаций.")
+
+        game_name = row.Game.name
+        user_id = row.game_recommendations.user_id
+        game_id = row.game_recommendations.game_id
+        await _db_remove_recommendation(session, user_id, game_id)
+        await session.commit()
+        return _make_result("deleted", f"Последняя рекомендация по игре «{game_name}» удалена.")
 
 
 async def delete_own_recommendation_by_title(query: str, user_login: str) -> RecommendationActionResult:
@@ -451,23 +356,18 @@ async def delete_own_recommendation_by_title(query: str, user_login: str) -> Rec
     if _user_is_banned(user_login):
         return _make_fake_delete_result(query)
 
-    session = SessionLocal()
-    try:
-        recommendation = find_recommendation_by_query(session, query)
-        if not recommendation:
+    async with AsyncSessionLocal() as session:
+        game = await _db_find_game_by_query(session, query)
+        if not game:
             return _make_result("not_found", f"Не нашел рекомендацию для «{query}».")
 
-        vote = _find_user_vote_for_recommendation(session, recommendation.id, user_login)
-        if not vote:
-            return _make_result("not_found", f"Не нашел рекомендацию для «{recommendation.title}».")
+        user_rec = await _db_find_user_recommendation(session, game.id, user_login)
+        if not user_rec:
+            return _make_result("not_found", f"Не нашел рекомендацию для «{game.name}».")
 
-        title, deleted_recommendation = _remove_vote(session, vote)
-        sync_recommendation_matches(session)
-        session.commit()
-        suffix = " Игра убрана полностью" if deleted_recommendation else ""
-        return _make_result("deleted", f"Рекомендация по игре «{title}» удалена.{suffix}")
-    finally:
-        session.close()
+        await _db_remove_recommendation(session, user_rec["user_id"], user_rec["game_id"])
+        await session.commit()
+        return _make_result("deleted", f"Рекомендация по игре «{game.name}» удалена.")
 
 
 async def admin_delete_recommendations(target_user: str, query: str | None, actor_login: str) -> RecommendationActionResult:
@@ -481,54 +381,58 @@ async def admin_delete_recommendations(target_user: str, query: str | None, acto
     if not normalized_target:
         return _make_result("invalid", "Напиши: !рек -- [ник] [название игры] или !рек -- [ник]")
 
-    session = SessionLocal()
-    try:
+    async with AsyncSessionLocal() as session:
         if normalized_target in ADMIN_DELETE_ALL_MARKERS:
             if not query:
                 return _make_result("invalid", "Для удаления игры целиком напиши: !рек -- * [название игры]")
 
-            recommendation = find_recommendation_by_query(session, query)
-            if not recommendation:
+            game = await _db_find_game_by_query(session, query)
+            if not game:
                 return _make_result("not_found", f"Игра «{query}» в рекомендациях не найдена.")
 
-            title = recommendation.title
-            votes_count = len(recommendation.votes)
-            session.delete(recommendation)
-            session.flush()
-            session.commit()
-            return _make_result("deleted", f"Игра «{title}» удалена из рекомендаций целиком. Удалено голосов: {votes_count}.")
+            votes_count = await _get_recommenders_count(session, game.id)
+            await session.delete(game)
+            await session.flush()
+            await session.commit()
+            return _make_result("deleted", f"Игра «{game.name}» удалена из рекомендаций целиком. Удалено голосов: {votes_count}.")
 
         if not query:
-            votes = _load_user_active_votes(session, normalized_target)
+            user = await _get_user(session, normalized_target)
+            if not user:
+                return _make_result("not_found", f"У пользователя {target_user} нет активных рекомендаций.")
+
+            votes = await _db_load_user_recommendations(session, normalized_target)
             if not votes:
                 return _make_result("not_found", f"У пользователя {target_user} нет активных рекомендаций.")
 
-            removed_count = 0
             removed_titles = []
             for vote in votes:
-                title, _ = _remove_vote(session, vote)
-                removed_titles.append(title)
-                removed_count += 1
+                removed_titles.append(vote.get("name", ""))
+                await _db_remove_recommendation(session, vote["user_id"], vote["game_id"])
 
-            sync_recommendation_matches(session)
-            session.commit()
+            await session.commit()
             return _make_result(
                 "deleted",
-                f"У пользователя {target_user} удалено рекомендаций: {removed_count}. Игры: {', '.join(removed_titles[:5])}",
+                f"У пользователя {target_user} удалено рекомендаций: {len(removed_titles)}. Игры: {', '.join(removed_titles[:5])}",
             )
 
-        recommendation = find_recommendation_by_query(session, query)
-        if not recommendation:
+        game = await _db_find_game_by_query(session, query)
+        if not game:
             return _make_result("not_found", f"Игра «{query}» в рекомендациях не найдена.")
 
-        vote = _find_user_vote_for_recommendation(session, recommendation.id, normalized_target)
-        if not vote:
-            return _make_result("not_found", f"У пользователя {target_user} нет рекомендации для «{recommendation.title}».")
+        user_rec = await _db_find_user_recommendation(session, game.id, normalized_target)
+        if not user_rec:
+            return _make_result("not_found", f"У пользователя {target_user} нет рекомендации для «{game.name}».")
 
-        title, deleted_recommendation = _remove_vote(session, vote)
-        sync_recommendation_matches(session)
-        session.commit()
-        suffix = " Игра убрана полностью" if deleted_recommendation else ""
-        return _make_result("deleted", f"У пользователя {target_user} удалена рекомендация по игре «{title}».{suffix}")
-    finally:
-        session.close()
+        await _db_remove_recommendation(session, user_rec["user_id"], user_rec["game_id"])
+        await session.commit()
+        return _make_result("deleted", f"У пользователя {target_user} удалена рекомендация по игре «{game.name}».")
+
+
+async def _get_user(session: AsyncSession, login: str) -> User | None:
+    result = await session.execute(select(User).where(User.login == _normalize_user_login(login)))
+    return result.scalar_one_or_none()
+
+
+async def refresh_recommendation_lifecycle() -> int:
+    return 0

@@ -74,38 +74,41 @@ def build_hyperlink_formula(url, label: str = "Steam") -> str:
     return f'=HYPERLINK(\"{normalized_url}\"; \"{safe_label}\")'
 
 
-def build_tags_text(obj) -> str:
-    parts = [getattr(obj, "platforms_text", None), getattr(obj, "genres_text", None)]
+def build_tags_text(platforms_text: str = None, genres_text: str = None) -> str:
+    parts = [platforms_text, genres_text]
     parts = [part for part in parts if part]
     return " | ".join(parts)
 
 
-def build_recommenders_text(recommendation) -> str:
+def build_recommenders_text(recommender_data: list[dict]) -> str:
+    """Build recommenders text from a list of dicts with 'user_login' and 'display_name' keys."""
     tabula_present = False
     igdb_present = False
     users = []
 
-    for vote in getattr(recommendation, "votes", []) or []:
-        login = (getattr(vote, "user_login", None) or "").casefold()
+    for entry in recommender_data or []:
+        login = (entry.get("user_login") or "").casefold()
         if login == "tabula":
             tabula_present = True
             continue
         if login == "igdb":
             igdb_present = True
             continue
-        users.append(getattr(vote, "user_display_name", None))
+        display_name = entry.get("display_name")
+        if display_name:
+            users.append(display_name)
 
     result = []
     if tabula_present:
         result.append("В желаемом")
     if igdb_present:
         result.append("Хайп")
-    result.extend([u for u in users if u])
+    result.extend(users)
     return ", ".join(result)
 
 
-def format_rating_value(recommendation) -> str:
-    value = (getattr(recommendation, "rating_text", None) or "").strip()
+def format_rating_value(value: str | None) -> str:
+    value = (value or "").strip()
     if not value:
         return ""
     return value.split("|", 1)[0].strip()

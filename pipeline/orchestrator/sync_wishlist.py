@@ -1,9 +1,8 @@
 """
-Orchestrates syncing of Steam wishlist entries into Tabula's game recommendations.
+Orchestrates syncing of Steam wishlist entries into game recommendations.
 
 Parses storage/pages/steam_wishlist.html, looks up each game in IGDB,
-verifies the Steam URL matches, and creates a recommendation + vote
-as if the streamer had run the command "!рек + [game]".
+verifies the Steam URL matches, and creates a game + recommendation.
 """
 
 from __future__ import annotations
@@ -14,13 +13,15 @@ from pathlib import Path
 
 from bs4 import BeautifulSoup
 
-from database.db import SessionLocal
-from database.models import RecommendedGame
+from database.db import AsyncSessionLocal
+from database.models import GameMetadataIGDB
+from sqlalchemy import select
 from pipeline.ingest.igdb_api import fetch_recommendation_metadata
 from pipeline.load.load_recommendations import (
-    add_vote,
-    create_recommendation,
-    sync_recommendation_matches,
+    create_game_with_igdb,
+    add_recommendation,
+    find_game_by_query,
+    add_igdb_note,
 )
 from utils.logger import get_logger
 
@@ -98,38 +99,41 @@ async def _process_single_game(
         )
         return "skipped (Steam URL mismatch)"
 
-    recommendation = create_recommendation(
+    existing = await find_game_by_query(session, metadata.title)
+    if existing:
+        logger.info("[%d/%d] Game already exists: %s", index, total, metadata.title)
+        return "skipped (already exists)"
+
+    game = await create_game_with_igdb(
         session,
-        query_name=name,
-        title=metadata.title,
+        name=metadata.title,
+        igdb_id=metadata.source_game_id,
         release_date=metadata.release_date,
-        release_precision=metadata.release_precision,
-        description_short=metadata.description_short,
         steam_url=metadata.steam_url,
-        rating_text=metadata.rating_text,
-        platforms_text=metadata.platforms_text,
-        genres_text=metadata.genres_text,
+        igdb_score=_parse_igdb_score(metadata.rating_text),
+        description_ru=metadata.description_short,
         cover_url=metadata.cover_url,
-        source_name=metadata.source_name,
-        source_game_id=metadata.source_game_id,
-        source_payload=metadata.source_payload,
+        raw_payload=metadata.source_payload,
     )
 
-    add_vote(
-        session,
-        recommendation,
-        user_login=TABULA_LOGIN,
-        user_display_name=TABULA_DISPLAY_NAME,
-    )
-
-    sync_recommendation_matches(session)
-    session.commit()
+    await add_recommendation(session, game, TABULA_LOGIN, note="В списке желаемого Steam")
+    if metadata.source_name == "igdb":
+        await add_igdb_note(session, game.id, user_login="igdb")
 
     logger.info(
-        "[%d/%d] Added: '%s' (IGDB id=%s, status=%s)",
-        index, total, metadata.title, metadata.source_game_id, recommendation.status,
+        "[%d/%d] Added: '%s' (IGDB id=%s)",
+        index, total, metadata.title, metadata.source_game_id,
     )
     return "added"
+
+
+def _parse_igdb_score(rating_text: str | None) -> float | None:
+    if not rating_text:
+        return None
+    match = re.search(r"(\d+(?:\.\d+)?)", rating_text)
+    if match:
+        return float(match.group(1))
+    return None
 
 
 async def _sync_all():
@@ -147,14 +151,14 @@ async def _sync_all():
     if not items:
         return
 
-    session = SessionLocal()
-    try:
-        existing_app_ids = {
-            _extract_app_id(url)
-            for (url,) in session.query(RecommendedGame.steam_url).all()
-            if url
-        }
-        existing_app_ids.discard(None)
+    async with AsyncSessionLocal() as session:
+        result = await session.execute(select(GameMetadataIGDB.steam_url).where(GameMetadataIGDB.steam_url.isnot(None)))
+        existing_steam_urls = {row[0] for row in result.all() if row[0]}
+        existing_app_ids = set()
+        for url in existing_steam_urls:
+            app_id = _extract_app_id(url)
+            if app_id:
+                existing_app_ids.add(app_id)
 
         pending = []
         skipped_existing = 0
@@ -186,22 +190,18 @@ async def _sync_all():
                 else:
                     stats["skipped"] += 1
             except Exception as exc:
-                session.rollback()
+                await session.rollback()
                 logger.exception(
                     "[%d/%d] Error processing '%s': %s",
                     idx, len(pending), item["name"], exc,
                 )
                 stats["errors"] += 1
 
+        await session.commit()
         logger.info(
             "Sync complete: added=%d, skipped=%d, errors=%d",
             stats["added"], stats["skipped"], stats["errors"],
         )
-    except Exception:
-        logger.exception("Unexpected error during wishlist sync")
-        session.rollback()
-    finally:
-        session.close()
 
 
 def sync_wishlist():

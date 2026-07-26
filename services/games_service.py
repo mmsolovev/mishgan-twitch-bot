@@ -2,9 +2,12 @@ import re
 from dataclasses import dataclass
 from difflib import SequenceMatcher
 
-from config.settings import GAMES_SHEET_URL
-from database.db import SessionLocal
-from database.models import Game, GameMeta, GameStats
+from sqlalchemy import func, select
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from config.settings import GAMES_SHEET_URL, RECOMMENDATIONS_STREAMER_LOGIN
+from database.db import AsyncSessionLocal
+from database.models import Game, GameStats, GameMetadataHLTB, StreamGame, User, streamer_games
 
 
 MAX_VISIBLE_SUGGESTIONS = 3
@@ -45,7 +48,6 @@ class CandidateMatch:
 
 
 def _clean_query(query: str | None) -> str:
-    """Cleans the query by removing non-printable/invisible characters and stripping whitespace."""
     if not query:
         return ""
     cleaned = "".join(c for c in query if c.isprintable()).strip()
@@ -72,7 +74,6 @@ def _extract_number_tokens(value: str) -> set[str]:
 def _format_hours(value: float | None) -> str:
     if value is None:
         return "н/д"
-
     formatted = f"{value:.1f}".rstrip("0").rstrip(".")
     return formatted
 
@@ -99,53 +100,64 @@ def _doc_suffix() -> str:
     return " Таблица игр: ссылка не настроена"
 
 
-def _load_ranked_games() -> list[GameLookupResult]:
-    session = SessionLocal()
-
-    try:
-        rows: list[tuple[Game, GameStats, GameMeta | None]] = []
-
-        stats_rows = (
-            session.query(Game, GameStats, GameMeta)
-            .join(GameStats, GameStats.game_id == Game.id)
-            .outerjoin(GameMeta, GameMeta.game_id == Game.id)
-            .filter(GameStats.period == "all")
-            .all()
+async def _load_ranked_games() -> list[GameLookupResult]:
+    async with AsyncSessionLocal() as session:
+        result = await session.execute(
+            select(Game, GameStats, func.count(StreamGame.stream_id).label("streams_count"))
+            .join(StreamGame, StreamGame.game_id == Game.id)
+            .outerjoin(GameStats, GameStats.game_id == Game.id)
+            .group_by(Game.id, GameStats.game_id)
         )
+        rows = result.all()
 
-        for game, stats, meta in stats_rows:
-            rows.append((game, stats, meta))
+        streamer_user = None
+        if RECOMMENDATIONS_STREAMER_LOGIN:
+            user_result = await session.execute(
+                select(User).where(User.login == RECOMMENDATIONS_STREAMER_LOGIN)
+            )
+            streamer_user = user_result.scalar_one_or_none()
 
-        rows.sort(key=lambda item: (-(item[1].hours_streamed or 0), _normalize_text(item[0].name)))
+        streamer_likes: dict[int, tuple[bool | None, bool | None]] = {}
+        if streamer_user:
+            likes_result = await session.execute(
+                select(streamer_games).where(streamer_games.c.streamer_id == streamer_user.id)
+            )
+            for row in likes_result.all():
+                streamer_likes[row.game_id] = (row.liked, row.completed)
+
+        items = []
+        for game, stats, streams_count in rows:
+            liked, completed = streamer_likes.get(game.id, (None, None))
+            items.append((game, stats, streams_count, liked, completed))
+
+        items.sort(key=lambda item: (
+            -(item[1].streamed_hours or 0) if item[1] else 0,
+            _normalize_text(item[0].name),
+        ))
 
         ranked_games: list[GameLookupResult] = []
-        for rank, (game, stats, meta) in enumerate(rows, start=1):
+        for rank, (game, stats, streams_count, liked, completed) in enumerate(items, start=1):
             ranked_games.append(
                 GameLookupResult(
                     name=game.name,
-                    streams_count=int(stats.streams_count or 0),
-                    last_stream=stats.last_stream,
-                    hours_streamed=stats.hours_streamed or 0,
+                    streams_count=int(streams_count or 0),
+                    last_stream=stats.last_stream if stats else None,
+                    hours_streamed=stats.streamed_hours if stats and stats.streamed_hours else 0,
                     rank=rank,
-                    liked=meta.liked if meta else None,
-                    completed=meta.completed if meta else None,
+                    liked=liked,
+                    completed=completed,
                 )
             )
-
         return ranked_games
-    finally:
-        session.close()
 
 
 def _find_exact_match(query: str, ranked_games: list[GameLookupResult]) -> GameLookupResult | None:
     canonical_query = _canonicalize_text(query)
     if not canonical_query:
         return None
-
     for item in ranked_games:
         if _canonicalize_text(item.name) == canonical_query:
             return item
-
     return None
 
 
@@ -154,41 +166,33 @@ def _build_candidate_match(query: str, item: GameLookupResult) -> CandidateMatch
     canonical_name = _canonicalize_text(item.name)
     if not canonical_query or not canonical_name:
         return None
-
     query_numbers = _extract_number_tokens(query)
     name_numbers = _extract_number_tokens(item.name)
     if query_numbers and query_numbers != name_numbers:
         return None
-
     ratio = SequenceMatcher(None, canonical_query, canonical_name).ratio()
     query_tokens = set(canonical_query.split())
     name_tokens = set(canonical_name.split())
     overlap = len(query_tokens & name_tokens) / len(query_tokens) if query_tokens else 0.0
-
     bonus = 0.0
     if canonical_name.startswith(canonical_query):
         bonus += 0.10
     elif canonical_query in canonical_name:
         bonus += 0.06
-
     if query_tokens and query_tokens <= name_tokens:
         bonus += 0.10
-
     score = ratio * 0.7 + overlap * 0.3 + bonus
     if score < SIMILAR_MATCH_THRESHOLD:
         return None
-
     return CandidateMatch(game=item, score=score, ratio=ratio, overlap=overlap)
 
 
 def _find_similar_matches(query: str, ranked_games: list[GameLookupResult]) -> list[CandidateMatch]:
     matches: list[CandidateMatch] = []
-
     for item in ranked_games:
         candidate = _build_candidate_match(query, item)
         if candidate:
             matches.append(candidate)
-
     matches.sort(
         key=lambda item: (
             -item.score,
@@ -209,18 +213,15 @@ def _format_game_stats(match: GameLookupResult) -> str:
         f"В последний раз {_format_date(match.last_stream)}",
         f"Часов {_format_hours(match.hours_streamed)} (#{match.rank})",
     ]
-
     status = _format_status(match.liked, match.completed)
     if status:
         parts.append(status)
-
     return " | ".join(parts)
 
 
 def _format_suggestions(matches: list[CandidateMatch]) -> str:
     visible = [candidate.game.name for candidate in matches[:MAX_VISIBLE_SUGGESTIONS]]
     hidden_count = max(0, len(matches) - len(visible))
-
     message = ", ".join(f"«{name}»" for name in visible)
     if hidden_count:
         message += f" и еще {hidden_count}"
@@ -230,42 +231,32 @@ def _format_suggestions(matches: list[CandidateMatch]) -> str:
 def _is_confident_match(query: str, best_match: CandidateMatch, other_matches: list[CandidateMatch]) -> bool:
     if best_match.score < CONFIDENT_MATCH_THRESHOLD:
         return False
-
     query_numbers = _extract_number_tokens(query)
     if query_numbers and query_numbers == _extract_number_tokens(best_match.game.name):
         return True
-
     if not other_matches:
         return True
-
     next_best = other_matches[0]
     if best_match.score - next_best.score >= CONFIDENT_GAP_THRESHOLD:
         return True
-
     return best_match.ratio >= 0.97
 
 
-def find_game_lookup(query: str) -> GameLookupResult | None:
+async def find_game_lookup(query: str) -> GameLookupResult | None:
     query = _clean_query(query)
     if not query:
         return None
-
-    ranked_games = _load_ranked_games()
-
+    ranked_games = await _load_ranked_games()
     exact_match = _find_exact_match(query, ranked_games)
     if exact_match:
         return exact_match
-
     similar_matches = _find_similar_matches(query, ranked_games)
     if not similar_matches:
         return None
-
     best_match = similar_matches[0]
     other_matches = similar_matches[1:]
-
     if _is_confident_match(query, best_match, other_matches):
         return best_match.game
-
     return None
 
 
@@ -273,24 +264,19 @@ def build_games_help_message() -> str:
     return "MrDestructoid Написать в чат: !игры [название игры] — вывод статистики со стримов по игре" + _doc_suffix()
 
 
-def build_game_response(query: str) -> str:
+async def build_game_response(query: str) -> str:
     query = _clean_query(query)
     if not query:
         return build_games_help_message()
-
-    ranked_games = _load_ranked_games()
-
+    ranked_games = await _load_ranked_games()
     exact_match = _find_exact_match(query, ranked_games)
     if exact_match:
         return _format_game_stats(exact_match) + _doc_suffix()
-
     similar_matches = _find_similar_matches(query, ranked_games)
     if not similar_matches:
         return f"MrDestructoid Игра «{query}» не найдена, и похожих вариантов тоже нет. Скорее всего этой игры на стримах не было." + _doc_suffix()
-
     best_match = similar_matches[0]
     other_matches = similar_matches[1:]
-
     if _is_confident_match(query, best_match, other_matches):
         prefix = f"MrDestructoid Точного совпадения не найдено, но скорее всего это «{best_match.game.name}»."
         if other_matches:
@@ -299,7 +285,6 @@ def build_game_response(query: str) -> str:
                 f", например «{other_matches[0].game.name}»."
             )
         return prefix + " " + _format_game_stats(best_match.game) + _doc_suffix()
-
     suggestions = _format_suggestions(similar_matches)
     return (
         f"MrDestructoid Точного совпадения для «{query}» не найдено. Возможно, имелось в виду: {suggestions}. "

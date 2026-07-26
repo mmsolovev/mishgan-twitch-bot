@@ -6,8 +6,18 @@ Google Sheets delivery: Releases worksheet sync (upcoming + unknown release date
 
 from datetime import datetime
 
-from database.db import SessionLocal
-from database.models import RecommendedGame
+from database.db import AsyncSessionLocal
+from database.models import (
+    Game,
+    GameMetadataIGDB,
+    Genre,
+    Platform,
+    User,
+    game_genres,
+    game_platforms,
+    game_recommendations,
+    streamer_games,
+)
 from config.settings import RELEASES_SHEET_NAME
 from pipeline.delivery.sheets_utils import (
     build_hyperlink_formula,
@@ -18,7 +28,8 @@ from pipeline.delivery.sheets_utils import (
     get_or_create_worksheet as _get_or_create_worksheet,
 )
 from pipeline.transform.sheets_transform import normalize_row as _normalize_row, parse_sheet_bool
-from services.recommendations_service import STATUS_UPCOMING, refresh_recommendation_lifecycle
+from services.recommendations_service import refresh_recommendation_lifecycle
+from sqlalchemy import select, func
 
 
 def _format_releases_sheet(sheet, row_count):
@@ -139,18 +150,18 @@ def _format_releases_sheet(sheet, row_count):
     })
 
 
-def _format_release_value(recommendation):
-    if not recommendation.release_date:
+def _format_release_value(release_date):
+    if not release_date:
         return ""
-    return recommendation.release_date.strftime("%d.%m.%Y\n%H:%M")
+    return release_date.strftime("%d.%m.%Y\n%H:%M")
 
 
-def _format_release_delta(recommendation):
-    if not recommendation.release_date:
+def _format_release_delta(release_date):
+    if not release_date:
         return ""
 
     today = datetime.utcnow().date()
-    release_day = recommendation.release_date.date()
+    release_day = release_date.date()
     days = (release_day - today).days
 
     if days < 0:
@@ -158,22 +169,6 @@ def _format_release_delta(recommendation):
     if days == 0:
         return "сегодня"
     return f"{days} д."
-
-
-def _sync_release_manual_fields_from_sheet(session, existing_rows):
-    for recommendation_name, row in existing_rows.items():
-        recommendation = session.query(RecommendedGame).filter_by(title=recommendation_name).first()
-        if not recommendation:
-            continue
-
-        normalized_row = _normalize_row(row, 12)
-        sheet_value = parse_sheet_bool(normalized_row[5])
-        if sheet_value is True:
-            recommendation.streamer_interested = True
-        elif sheet_value is False and recommendation.streamer_interested is False:
-            recommendation.streamer_interested = False
-
-    session.flush()
 
 
 def _release_comparable_row(row):
@@ -189,31 +184,62 @@ def _release_comparable_row(row):
     return comparable
 
 
-def _build_release_row(recommendation):
-    steam = build_hyperlink_formula(recommendation.steam_url)
-    return [
-        _format_release_value(recommendation),
-        _format_release_delta(recommendation),
-        recommendation.title,
-        recommendation.description_short or "",
+def _build_release_row(data, manual_columns=None):
+    steam = build_hyperlink_formula(data.get("steam_url"))
+    row = [
+        _format_release_value(data.get("release_date")),
+        _format_release_delta(data.get("release_date")),
+        data["name"],
+        data.get("description_ru") or "",
         steam,
-        bool(recommendation.streamer_interested),
+        data.get("streamer_interested", False),
         "",
         "",
         "",
         "",
-        build_tags_text(recommendation),
-        build_recommenders_text(recommendation),
+        build_tags_text(data.get("platforms_text"), data.get("genres_text")),
+        build_recommenders_text(data.get("recommenders") or []),
     ]
 
+    if manual_columns is not None:
+        row[6:10] = manual_columns
 
-def sync_releases_safe() -> None:
-    refresh_recommendation_lifecycle()
+    return row
+
+
+async def _get_game_tags(session, game_id: int) -> tuple[str, str]:
+    genres_result = await session.execute(
+        select(Genre.name)
+        .join(game_genres, game_genres.c.genre_id == Genre.id)
+        .where(game_genres.c.game_id == game_id)
+    )
+    genres_text = ", ".join(row[0] for row in genres_result.all())
+
+    platforms_result = await session.execute(
+        select(Platform.name)
+        .join(game_platforms, game_platforms.c.platform_id == Platform.id)
+        .where(game_platforms.c.game_id == game_id)
+    )
+    platforms_text = ", ".join(row[0] for row in platforms_result.all())
+
+    return platforms_text, genres_text
+
+
+async def _get_game_recommenders(session, game_id: int) -> list[dict]:
+    result = await session.execute(
+        select(User.login, User.display_name)
+        .join(game_recommendations, game_recommendations.c.user_id == User.id)
+        .where(game_recommendations.c.game_id == game_id)
+    )
+    return [{"user_login": row[0], "display_name": row[1]} for row in result.all()]
+
+
+async def sync_releases_safe() -> None:
+    await refresh_recommendation_lifecycle()
 
     client = get_client()
     sheet = _get_or_create_worksheet(client, RELEASES_SHEET_NAME)
 
-    session = SessionLocal()
     values = sheet.get_all_values()
     data_rows = values[8:] if len(values) > 8 else []
 
@@ -224,22 +250,92 @@ def sync_releases_safe() -> None:
         if title:
             existing[title] = normalized_row
 
-    _sync_release_manual_fields_from_sheet(session, existing)
+    async with AsyncSessionLocal() as session:
+        # Sync streamer_interested from sheet back to DB
+        for game_name, row in existing.items():
+            result = await session.execute(
+                select(Game).where(Game.name == game_name).limit(1)
+            )
+            game = result.scalar_one_or_none()
+            if not game:
+                continue
+            normalized_row = _normalize_row(row, 12)
+            sheet_value = parse_sheet_bool(normalized_row[5])
+            if sheet_value is True:
+                await session.execute(
+                    streamer_games.update()
+                    .where(streamer_games.c.game_id == game.id, streamer_games.c.streamer_id == 1)
+                    .values(interested=True)
+                )
+            elif sheet_value is False:
+                sg_result = await session.execute(
+                    select(streamer_games.c.interested)
+                    .where(streamer_games.c.game_id == game.id, streamer_games.c.streamer_id == 1)
+                    .limit(1)
+                )
+                current = sg_result.scalar_one_or_none()
+                if current is False:
+                    await session.execute(
+                        streamer_games.update()
+                        .where(streamer_games.c.game_id == game.id, streamer_games.c.streamer_id == 1)
+                        .values(interested=False)
+                    )
+        await session.flush()
 
-    recommendations = (
-        session.query(RecommendedGame)
-        .filter((RecommendedGame.status == STATUS_UPCOMING) | (RecommendedGame.release_date.is_(None)))
-        .order_by(
-            RecommendedGame.release_date.is_(None),
-            RecommendedGame.release_date.asc(),
-            RecommendedGame.title.asc(),
+        # Query upcoming games: release_date in future OR unknown, with at least one recommender
+        now = datetime.utcnow()
+        subq = (
+            select(game_recommendations.c.game_id)
+            .group_by(game_recommendations.c.game_id)
+            .having(func.count() > 0)
         )
-        .all()
-    )
+
+        games_result = await session.execute(
+            select(Game)
+            .join(GameMetadataIGDB, GameMetadataIGDB.game_id == Game.id)
+            .where(
+                Game.id.in_(subq),
+                (GameMetadataIGDB.release_date > now) | (GameMetadataIGDB.release_date.is_(None)),
+            )
+            .order_by(
+                GameMetadataIGDB.release_date.is_(None),
+                GameMetadataIGDB.release_date.asc(),
+                Game.name.asc(),
+            )
+        )
+        games = games_result.scalars().unique().all()
+
+        dataset_rows = []
+        for game in games:
+            igdb_result = await session.execute(
+                select(GameMetadataIGDB).where(GameMetadataIGDB.game_id == game.id).limit(1)
+            )
+            igdb = igdb_result.scalar_one_or_none()
+
+            sg_result = await session.execute(
+                select(streamer_games.c.interested)
+                .where(streamer_games.c.game_id == game.id, streamer_games.c.streamer_id == 1)
+                .limit(1)
+            )
+            interested = sg_result.scalar_one_or_none() or False
+
+            platforms_text, genres_text = await _get_game_tags(session, game.id)
+            recommenders = await _get_game_recommenders(session, game.id)
+
+            dataset_rows.append({
+                "name": game.name,
+                "release_date": igdb.release_date if igdb else None,
+                "steam_url": igdb.steam_url if igdb else None,
+                "description_ru": igdb.description_ru if igdb else None,
+                "streamer_interested": interested,
+                "platforms_text": platforms_text,
+                "genres_text": genres_text,
+                "recommenders": recommenders,
+            })
 
     rows = []
-    for offset, recommendation in enumerate(recommendations, start=9):
-        row = _build_release_row(recommendation)
+    for offset, data in enumerate(dataset_rows, start=9):
+        row = _build_release_row(data)
         row[6] = f'=IF(F{offset}=TRUE;"👍";"")'
         rows.append(row)
 
@@ -253,9 +349,6 @@ def sync_releases_safe() -> None:
             sheet.update("A9", rows, value_input_option="USER_ENTERED")
 
     print(f"Releases synced: {len(rows)}")
-
-    session.commit()
-    session.close()
 
 
 __all__ = ["sync_releases_safe"]

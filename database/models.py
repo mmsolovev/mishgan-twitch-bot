@@ -14,6 +14,7 @@ from sqlalchemy import (
     UniqueConstraint,
 )
 from sqlalchemy.dialects.postgresql import JSONB, UUID
+from sqlalchemy.orm import relationship
 
 from database.db import Base
 
@@ -35,6 +36,12 @@ class Game(Base):
     created_at = Column(DateTime)
     updated_at = Column(DateTime)
 
+    aliases = relationship("GameAlias", back_populates="game", cascade="all, delete-orphan")
+    stream_games = relationship("StreamGame", back_populates="game", cascade="all, delete-orphan")
+    igdb_metadata = relationship("GameMetadataIGDB", back_populates="game", uselist=False, cascade="all, delete-orphan")
+    hltb_metadata = relationship("GameMetadataHLTB", back_populates="game", uselist=False, cascade="all, delete-orphan")
+    game_stats = relationship("GameStats", back_populates="game", uselist=False, cascade="all, delete-orphan")
+
 
 class Stream(Base):
     __tablename__ = "streams"
@@ -51,6 +58,10 @@ class Stream(Base):
     views_gained = Column(Integer)
     created_at = Column(DateTime)
     updated_at = Column(DateTime)
+
+    stream_games = relationship("StreamGame", back_populates="stream", cascade="all, delete-orphan")
+    stream_recordings = relationship("StreamRecording", back_populates="stream", cascade="all, delete-orphan")
+    streamers_on_stream = relationship("User", secondary="streamers_on_stream", backref="streams_on")
 
 
 class User(Base):
@@ -424,6 +435,9 @@ class StreamGame(Base):
         Index("ix_stream_games_game_id", "game_id"),
     )
 
+    stream = relationship("Stream", back_populates="stream_games")
+    game = relationship("Game", back_populates="stream_games")
+
 
 class StreamRecording(Base):
     __tablename__ = "stream_recordings"
@@ -439,6 +453,8 @@ class StreamRecording(Base):
         Index("ix_stream_recordings_stream_id", "stream_id"),
         Index("ix_stream_recordings_source", "source"),
     )
+
+    stream = relationship("Stream", back_populates="stream_recordings")
 
 
 streamers_on_stream = Table(
@@ -519,6 +535,8 @@ class GameMetadataIGDB(Base):
     raw_payload = Column(JSONB)
     synced_at = Column(DateTime)
 
+    game = relationship("Game", back_populates="igdb_metadata")
+
 
 class GameMetadataHLTB(Base):
     __tablename__ = "game_metadata_hltb"
@@ -533,6 +551,8 @@ class GameMetadataHLTB(Base):
     review_count = Column(Integer)
     synced_at = Column(DateTime)
 
+    game = relationship("Game", back_populates="hltb_metadata")
+
 
 class GameStats(Base):
     __tablename__ = "game_stats"
@@ -545,6 +565,8 @@ class GameStats(Base):
     streams_count = Column(Integer)
     last_stream = Column(DateTime)
     synced_at = Column(DateTime, nullable=False)
+
+    game = relationship("Game", back_populates="game_stats")
 
 
 class GameAlias(Base):
@@ -562,6 +584,8 @@ class GameAlias(Base):
         UniqueConstraint("game_id", "normalized_alias", name="uq_game_aliases_game_normalized"),
         Index("ix_game_aliases_normalized_alias", "normalized_alias"),
     )
+
+    game = relationship("Game", back_populates="aliases")
 
 
 # =====================================================

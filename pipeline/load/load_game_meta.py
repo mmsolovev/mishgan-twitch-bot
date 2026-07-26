@@ -1,81 +1,89 @@
 from __future__ import annotations
 
 """
-Load layer: writes targeting `games_meta` table (GameMeta).
+Load layer: writes targeting `game_metadata_igdb` and `game_metadata_hltb` tables.
 """
 
+from dataclasses import dataclass
+
 from sqlalchemy import or_
-from sqlalchemy.orm import Session, joinedload
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select
 
-from database.models import Game, GameMeta
-from pipeline.transform.games_transform import GamesMetaRowView
-from pipeline.transform.sheets_transform import normalize_row, parse_sheet_bool
+from database.models import Game, GameMetadataIGDB, GameMetadataHLTB
 
 
-def select_enrichment_candidates(
-    session: Session,
+@dataclass(frozen=True, slots=True)
+class EnrichmentCandidate:
+    game_id: int
+    game_name: str
+    has_hltb: bool
+    has_igdb: bool
+
+
+async def select_igdb_enrichment_candidates(
+    session: AsyncSession,
     *,
     only_game_id: int = 0,
     limit: int = 0,
-) -> list[GamesMetaRowView]:
+) -> list[EnrichmentCandidate]:
+    """
+    Finds games where IGDB metadata is missing or incomplete.
+    """
     q = (
-        session.query(GameMeta, Game)
-        .join(Game, Game.id == GameMeta.game_id)
-        .options(joinedload(GameMeta.game))
-        .order_by(GameMeta.game_id)
+        select(Game)
+        .outerjoin(GameMetadataIGDB, Game.id == GameMetadataIGDB.game_id)
+        .where(
+            or_(
+                GameMetadataIGDB.igdb_id.is_(None),
+                GameMetadataIGDB.steam_url.is_(None),
+                GameMetadataIGDB.steam_url == "",
+                GameMetadataIGDB.description_ru.is_(None),
+                GameMetadataIGDB.release_date.is_(None),
+            )
+        )
+        .order_by(Game.id)
     )
 
     if int(only_game_id) > 0:
-        q = q.filter(GameMeta.game_id == int(only_game_id))
-    else:
-        q = q.filter(
-            or_(
-                GameMeta.hltb_hours.is_(None),
-                GameMeta.hltb_hours <= 0,
-                GameMeta.steam_url.is_(None),
-                GameMeta.steam_url == "",
-                GameMeta.platforms_text.is_(None),
-                GameMeta.platforms_text == "",
-                GameMeta.genres_text.is_(None),
-                GameMeta.genres_text == "",
-            )
-        )
+        q = q.where(Game.id == int(only_game_id))
 
     if int(limit) > 0:
         q = q.limit(int(limit))
 
-    out: list[GamesMetaRowView] = []
-    for gm, g in q.all():
-        out.append(
-            GamesMetaRowView(
-                game_id=int(gm.game_id),
-                game_name=str(getattr(g, "name", "") or ""),
-                hltb_hours=gm.hltb_hours,
-                steam_url=gm.steam_url,
-                platforms_text=gm.platforms_text,
-                genres_text=gm.genres_text,
-            )
+    result = await session.execute(q)
+    games = result.scalars().all()
+
+    candidates = []
+    for game in games:
+        hltb_result = await session.execute(
+            select(GameMetadataHLTB).where(GameMetadataHLTB.game_id == game.id)
         )
-    return out
+        has_hltb = hltb_result.scalar_one_or_none() is not None
+        candidates.append(EnrichmentCandidate(game_id=int(game.id), game_name=game.name, has_hltb=has_hltb, has_igdb=False))
+    return candidates
 
 
-def apply_games_meta_patch(session: Session, *, game_id: int, patch: dict) -> bool:
+async def apply_igdb_patch(session: AsyncSession, *, game_id: int, igdb_id: str | None = None, patch: dict) -> bool:
     """
-    Apply patch to GameMeta row. Commit/rollback is responsibility of caller.
+    Apply patch fields to GameMetadataIGDB row. Creates row if missing.
     Returns True if anything changed.
     """
     if not patch:
         return False
 
-    row = session.query(GameMeta).filter_by(game_id=int(game_id)).one_or_none()
+    result = await session.execute(select(GameMetadataIGDB).where(GameMetadataIGDB.game_id == game_id))
+    row = result.scalar_one_or_none()
+    created = False
     if row is None:
-        row = GameMeta(game_id=int(game_id))
+        row = GameMetadataIGDB(game_id=game_id, igdb_id=igdb_id or f"pending-{game_id}")
         session.add(row)
-        session.flush()
+        await session.flush()
+        created = True
 
-    changed = False
+    changed = created
     for k, v in patch.items():
-        if getattr(row, k) != v:
+        if hasattr(row, k) and getattr(row, k) != v:
             setattr(row, k, v)
             changed = True
 
@@ -84,45 +92,37 @@ def apply_games_meta_patch(session: Session, *, game_id: int, patch: dict) -> bo
     return changed
 
 
-def _get_or_create_game_meta(game: Game) -> GameMeta:
-    if not game.meta:
-        game.meta = GameMeta()
-    return game.meta
-
-
-def apply_games_manual_fields(session: Session, rows_by_game_name: dict[str, list], width: int = 12) -> int:
+async def apply_hltb_patch(session: AsyncSession, *, game_id: int, patch: dict) -> bool:
     """
-    Updates manual flags from Sheets targeting `games_meta`.
-    Commit/rollback is responsibility of the caller.
+    Apply patch fields to GameMetadataHLTB row. Creates row if missing.
+    Returns True if anything changed.
     """
-    updated = 0
+    if not patch:
+        return False
 
-    for game_name, row in (rows_by_game_name or {}).items():
-        game = session.query(Game).filter_by(name=game_name).first()
-        if not game:
-            continue
+    result = await session.execute(select(GameMetadataHLTB).where(GameMetadataHLTB.game_id == game_id))
+    row = result.scalar_one_or_none()
+    created = False
+    if row is None:
+        row = GameMetadataHLTB(game_id=game_id)
+        session.add(row)
+        await session.flush()
+        created = True
 
-        meta = _get_or_create_game_meta(game)
-        normalized = normalize_row(row, width)
+    changed = created
+    for k, v in patch.items():
+        if hasattr(row, k) and getattr(row, k) != v:
+            setattr(row, k, v)
+            changed = True
 
-        new_liked = parse_sheet_bool(normalized[7])
-        new_completed = parse_sheet_bool(normalized[9])
-
-        # Only assign when sheet value is explicit; keep DB value otherwise.
-        if new_liked is not None and bool(meta.liked) != bool(new_liked):
-            meta.liked = bool(new_liked)
-            updated += 1
-        if new_completed is not None and bool(meta.completed) != bool(new_completed):
-            meta.completed = bool(new_completed)
-            updated += 1
-
-    session.flush()
-    return updated
+    if changed:
+        session.add(row)
+    return changed
 
 
 __all__ = [
-    "apply_games_manual_fields",
-    "apply_games_meta_patch",
-    "select_enrichment_candidates",
+    "EnrichmentCandidate",
+    "apply_hltb_patch",
+    "apply_igdb_patch",
+    "select_igdb_enrichment_candidates",
 ]
-
