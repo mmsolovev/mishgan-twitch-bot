@@ -100,14 +100,14 @@ def _format_recommendations_sheet(sheet, row_count):
 
 async def _get_game_tags(session, game_id: int) -> tuple[str, str]:
     genres_result = await session.execute(
-        select(Genre.name)
+        select(func.coalesce(Genre.abbreviation, Genre.name))
         .join(game_genres, game_genres.c.genre_id == Genre.id)
         .where(game_genres.c.game_id == game_id)
     )
     genres_text = ", ".join(row[0] for row in genres_result.all())
 
     platforms_result = await session.execute(
-        select(Platform.name)
+        select(func.coalesce(Platform.abbreviation, Platform.name))
         .join(game_platforms, game_platforms.c.platform_id == Platform.id)
         .where(game_platforms.c.game_id == game_id)
     )

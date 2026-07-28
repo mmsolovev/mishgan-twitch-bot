@@ -5,7 +5,6 @@ Load layer: writes targeting `games`, `game_metadata_igdb`, `game_recommendation
 `streamer_games` tables — replaces old RecommendedGame / RecommendedGameVote.
 """
 
-from collections.abc import Iterable
 from datetime import datetime, timezone
 
 from sqlalchemy import select, delete
@@ -16,11 +15,11 @@ from database.models import (
     Game,
     GameMetadataIGDB,
     GameAlias,
-    User,
     game_recommendations,
     streamer_games,
 )
 from pipeline.transform.recommendations_transform import normalize_recommendation_name, normalize_user_login
+from services.user_service import get_or_create_user_by_login
 
 
 ACTIVE_RECOMMENDATION_STATUSES = {"upcoming", "released"}
@@ -78,7 +77,7 @@ async def add_recommendation(
     if not normalized_login:
         raise ValueError("user_login is required")
 
-    user = await _get_or_create_user(session, normalized_login)
+    user = await get_or_create_user_by_login(session, normalized_login)
 
     existing = await session.execute(
         select(game_recommendations).where(
@@ -178,7 +177,7 @@ async def create_game_with_igdb(
 
 
 async def add_igdb_note(session: AsyncSession, game_id: int, user_login: str = "igdb") -> None:
-    user = await _get_or_create_user(session, user_login)
+    user = await get_or_create_user_by_login(session, user_login)
     existing = await session.execute(
         select(game_recommendations).where(
             game_recommendations.c.user_id == user.id,
@@ -209,7 +208,7 @@ async def find_existing_game(
 
 
 async def find_user_recommendation(session: AsyncSession, game_id: int, user_login: str) -> dict | None:
-    user = await _get_or_create_user(session, normalize_user_login(user_login))
+    user = await get_or_create_user_by_login(session, normalize_user_login(user_login))
     result = await session.execute(
         select(game_recommendations).where(
             game_recommendations.c.user_id == user.id,
@@ -221,7 +220,7 @@ async def find_user_recommendation(session: AsyncSession, game_id: int, user_log
 
 
 async def load_user_recommendations(session: AsyncSession, user_login: str) -> list[dict]:
-    user = await _get_or_create_user(session, normalize_user_login(user_login))
+    user = await get_or_create_user_by_login(session, normalize_user_login(user_login))
     result = await session.execute(
         select(game_recommendations, Game)
         .join(Game, Game.id == game_recommendations.c.game_id)
@@ -281,7 +280,7 @@ async def set_game_short_description(session: AsyncSession, game: Game, descript
 
 
 async def set_streamer_interested(session: AsyncSession, game_id: int, user_login: str, interested: bool) -> bool:
-    user = await _get_or_create_user(session, normalize_user_login(user_login))
+    user = await get_or_create_user_by_login(session, normalize_user_login(user_login))
     result = await session.execute(
         select(streamer_games).where(
             streamer_games.c.streamer_id == user.id,
@@ -331,16 +330,6 @@ async def update_release_dates(session: AsyncSession, games_to_update: list[Game
         session.add(game)
     await session.flush()
     return len(games_to_update)
-
-
-async def _get_or_create_user(session: AsyncSession, login: str) -> User:
-    result = await session.execute(select(User).where(User.login == login))
-    user = result.scalar_one_or_none()
-    if user is None:
-        user = User(login=login, display_name=f"@{login}")
-        session.add(user)
-        await session.flush()
-    return user
 
 
 __all__ = [

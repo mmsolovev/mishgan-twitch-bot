@@ -11,16 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from database.models import User, Stream, streamers_on_stream
 from pipeline.load.load_stream_games import unique_in_order
-
-
-async def get_or_create_user(session: AsyncSession, name: str) -> User:
-    result = await session.execute(select(User).where(User.login == name))
-    user = result.scalar_one_or_none()
-    if user is None:
-        user = User(login=name, display_name=f"@{name}")
-        session.add(user)
-        await session.flush()
-    return user
+from services.user_service import get_or_create_user_by_login
 
 
 def extract_participants_from_title(title: str | None) -> list[str]:
@@ -54,7 +45,7 @@ async def sync_stream_participants_from_title(session: AsyncSession, stream: Str
     for name in desired_names:
         if name in existing_logins:
             continue
-        user = await get_or_create_user(session, name)
+        user = await get_or_create_user_by_login(session, name)
         session.add(streamers_on_stream.insert().values(stream_id=stream.id, streamer_id=user.id))
         existing_logins.add(name)
         changed = True
@@ -64,6 +55,6 @@ async def sync_stream_participants_from_title(session: AsyncSession, stream: Str
 
 __all__ = [
     "extract_participants_from_title",
-    "get_or_create_user",
+    "get_or_create_user_by_login",
     "sync_stream_participants_from_title",
 ]

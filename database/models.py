@@ -111,6 +111,7 @@ class Genre(Base):
     id = Column(Integer, primary_key=True)
     name = Column(Text, nullable=False, unique=True)
     slug = Column(Text, unique=True)
+    abbreviation = Column(Text)
     created_at = Column(DateTime)
 
 
@@ -120,6 +121,7 @@ class Platform(Base):
     id = Column(Integer, primary_key=True)
     name = Column(Text, nullable=False, unique=True)
     slug = Column(Text, unique=True)
+    abbreviation = Column(Text)
     created_at = Column(DateTime)
 
 

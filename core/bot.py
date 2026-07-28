@@ -6,8 +6,14 @@ from twitchio.ext.commands.errors import CommandNotFound
 from core.context import SafeContext
 from core.registry import load_commands
 import config.settings as settings
+from sqlalchemy import select
+
+from database.db import AsyncSessionLocal
+from database.models import User
+from services.command_usage_service import ensure_bot_commands, log_command_usage
 from services.eventsub_service import EventSubService
 from services.deferred_service import RecommendationSheetsSyncScheduler
+from services.user_service import get_or_create_user, get_or_create_user_by_login
 
 
 class Bot(commands.Bot):
@@ -28,6 +34,9 @@ class Bot(commands.Bot):
         if not self.commands_loaded:
             load_commands(self)
             self.commands_loaded = True
+
+            async with AsyncSessionLocal() as session:
+                await ensure_bot_commands(session)
 
         if not self.eventsub_service.connected:
             try:
@@ -54,6 +63,23 @@ class Bot(commands.Bot):
                 return
 
         await self.handle_commands(message)
+
+    async def event_command(self, context):
+        try:
+            async with AsyncSessionLocal() as session:
+                user = await get_or_create_user(session, context.author)
+
+                result = await session.execute(
+                    select(User).where(User.login == context.channel.name)
+                )
+                streamer = result.scalar_one_or_none()
+                if streamer is None:
+                    streamer = await get_or_create_user_by_login(session, context.channel.name)
+
+                await log_command_usage(session, user, streamer, context.command.name)
+                await session.commit()
+        except Exception as exc:
+            print(f"[CMD] logging error: {exc}")
 
     async def event_command_error(self, context, error):
         if isinstance(error, CommandNotFound):

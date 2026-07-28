@@ -29,14 +29,14 @@ from sqlalchemy import select, func
 
 async def _build_tags_text(session, game_id: int) -> str:
     genres_result = await session.execute(
-        select(Genre.name)
+        select(func.coalesce(Genre.abbreviation, Genre.name))
         .join(game_genres, game_genres.c.genre_id == Genre.id)
         .where(game_genres.c.game_id == game_id)
     )
     genres = ", ".join(row[0] for row in genres_result.all())
 
     platforms_result = await session.execute(
-        select(Platform.name)
+        select(func.coalesce(Platform.abbreviation, Platform.name))
         .join(game_platforms, game_platforms.c.platform_id == Platform.id)
         .where(game_platforms.c.game_id == game_id)
     )
