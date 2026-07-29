@@ -544,12 +544,15 @@ class GameMetadataHLTB(Base):
     __tablename__ = "game_metadata_hltb"
 
     game_id = Column(Integer, ForeignKey("games.id"), primary_key=True)
-    hltb_id = Column(Text, unique=True)
+    hltb_id = Column(Text)
     hltb_name = Column(Text)
-    avg_hours = Column(Float)
-    main_story_hours = Column(Float)
-    main_extra_hours = Column(Float)
-    completionist_hours = Column(Float)
+    hltb_main_story = Column(Float)
+    hltb_main_extra = Column(Float)
+    hltb_completionist = Column(Float)
+    hltb_all_styles = Column(Float)
+    hltb_coop = Column(Float)
+    hltb_multiplayer = Column(Float)
+    hltb_review_score = Column(Integer)
     review_count = Column(Integer)
     synced_at = Column(DateTime)
 

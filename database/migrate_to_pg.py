@@ -346,9 +346,9 @@ async def migrate_game_metadata(sqlite_conn, pg_session, game_id_mapping):
         if row["hltb_hours"] is not None:
             await pg_session.execute(
                 text("""
-                    INSERT INTO game_metadata_hltb (game_id, main_story_hours, synced_at)
+                    INSERT INTO game_metadata_hltb (game_id, hltb_main_story, synced_at)
                     VALUES (:game_id, :hours, :now)
-                    ON CONFLICT (game_id) DO UPDATE SET main_story_hours = EXCLUDED.main_story_hours
+                    ON CONFLICT (game_id) DO UPDATE SET hltb_main_story = EXCLUDED.hltb_main_story
                 """),
                 {"game_id": new_game_id, "hours": row["hltb_hours"], "now": utcnow()},
             )

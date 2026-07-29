@@ -213,7 +213,7 @@ async def _enrich_games_meta(
             if _cache_fresh(hltb_entry, ttl_days=HLTB_CACHE_TTL_DAYS) and isinstance(
                 hltb_entry.get("hltb_hours"), (int, float)
             ):
-                hltb_patch["avg_hours"] = float(hltb_entry["hltb_hours"])
+                hltb_patch["hltb_all_styles"] = float(hltb_entry["hltb_hours"])
             else:
                 since_last = time.time() - hltb_last_call_at
                 if since_last < HLTB_DELAY_SECONDS:
@@ -228,7 +228,7 @@ async def _enrich_games_meta(
                 hltb_last_call_at = time.time()
                 hltb_calls += 1
                 if result is not None:
-                    hltb_patch["avg_hours"] = float(result.hltb_hours)
+                    hltb_patch["hltb_all_styles"] = float(result.hltb_hours)
                     cache["hltb"][key] = {
                         "hltb_hours": float(result.hltb_hours),
                         "matched_name": result.matched_name,

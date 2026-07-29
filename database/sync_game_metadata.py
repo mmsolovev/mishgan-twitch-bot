@@ -81,7 +81,7 @@ class _RateLimiter:
 
 class _LoopState:
     def __init__(self) -> None:
-        self.rate = _RateLimiter(max_calls=_RATE_LIMIT_RPS, period_seconds=1.0)
+        self.rate = _RateLimiter(max_calls=_RATE_LIMIT_RPS, period=1.0)
         self.inflight = asyncio.Semaphore(_MAX_INFLIGHT)
         self.cache: dict[str, dict | None] = {}
         self.cache_ttl = 3600
@@ -262,49 +262,66 @@ async def sync_game_metadata() -> None:
             igdb_score = _score_from_igdb(payload)
 
             async with AsyncSessionLocal() as session:
-                result = await session.execute(
-                    select(GameMetadataIGDB).where(
-                        GameMetadataIGDB.game_id == game.id
-                    ).limit(1)
-                )
-                existing = result.scalar_one_or_none()
-
-                if existing is not None:
-                    existing.igdb_id = igdb_id
-                    existing.igdb_name = igdb_name
-                    existing.description_en = summary
-                    existing.release_date = release_date
-                    existing.steam_url = steam_url
-                    existing.cover_url = cover_url or None
-                    existing.igdb_score = igdb_score
-                    existing.raw_payload = payload
-                    existing.synced_at = _utcnow()
-                    updated += 1
-                else:
-                    meta = GameMetadataIGDB(
-                        game_id=game.id,
-                        igdb_id=igdb_id,
-                        igdb_name=igdb_name,
-                        description_en=summary,
-                        release_date=release_date,
-                        steam_url=steam_url,
-                        cover_url=cover_url or None,
-                        igdb_score=igdb_score,
-                        raw_payload=payload,
-                        synced_at=_utcnow(),
+                with session.no_autoflush:
+                    # Check if target igdb_id is already taken by another row
+                    conflict = await session.execute(
+                        select(GameMetadataIGDB.game_id)
+                        .where(GameMetadataIGDB.igdb_id == igdb_id, GameMetadataIGDB.game_id != game.id)
+                        .limit(1)
                     )
-                    session.add(meta)
-                    inserted += 1
-                # Replace genre/platform links with fresh data from IGDB
-                await session.execute(
-                    game_genres.delete().where(game_genres.c.game_id == game.id)
-                )
-                await session.execute(
-                    game_platforms.delete().where(game_platforms.c.game_id == game.id)
-                )
-                await _link_genres(session, game.id, payload.get("genres") or [])
-                await _link_platforms(session, game.id, payload.get("platforms") or [])
-                await session.commit()
+                    id_conflict = conflict.first() is not None
+
+                    result = await session.execute(
+                        select(GameMetadataIGDB).where(
+                            GameMetadataIGDB.game_id == game.id
+                        ).limit(1)
+                    )
+                    existing = result.scalar_one_or_none()
+
+                    if existing is not None:
+                        if id_conflict:
+                            log.warning("igdb_id %r belongs to another game, skipping %r", igdb_id, game.name)
+                            skipped += 1
+                            continue
+                        existing.igdb_id = igdb_id
+                        existing.igdb_name = igdb_name
+                        existing.description_en = summary
+                        existing.release_date = release_date
+                        existing.steam_url = steam_url
+                        existing.cover_url = cover_url or None
+                        existing.igdb_score = igdb_score
+                        existing.raw_payload = payload
+                        existing.synced_at = _utcnow()
+                        updated += 1
+                    else:
+                        if id_conflict:
+                            log.warning("igdb_id %r already exists in DB, skipping %r", igdb_id, game.name)
+                            skipped += 1
+                            continue
+                        meta = GameMetadataIGDB(
+                            game_id=game.id,
+                            igdb_id=igdb_id,
+                            igdb_name=igdb_name,
+                            description_en=summary,
+                            release_date=release_date,
+                            steam_url=steam_url,
+                            cover_url=cover_url or None,
+                            igdb_score=igdb_score,
+                            raw_payload=payload,
+                            synced_at=_utcnow(),
+                        )
+                        session.add(meta)
+                        inserted += 1
+                    # Replace genre/platform links with fresh data from IGDB
+                    await session.execute(
+                        game_genres.delete().where(game_genres.c.game_id == game.id)
+                    )
+                    await session.execute(
+                        game_platforms.delete().where(game_platforms.c.game_id == game.id)
+                    )
+                    await _link_genres(session, game.id, payload.get("genres") or [])
+                    await _link_platforms(session, game.id, payload.get("platforms") or [])
+                    await session.commit()
 
             processed += 1
             if processed % 25 == 0:
