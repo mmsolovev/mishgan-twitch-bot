@@ -30,8 +30,14 @@ logging.basicConfig(
 )
 log = logging.getLogger(__name__)
 
-HLTB_DELAY_SECONDS = 1.5
-MIN_SIMILARITY = 0.6
+HLTB_DELAY_SECONDS = 2.0
+HLTB_RETRY_DELAY = 10.0
+HLTB_MAX_RETRIES = 3
+MIN_SIMILARITY = 0.4
+
+_IGNORED_CATEGORIES = {
+    "just chatting", "special events", "games + demos", "retro", "variety",
+}
 
 
 def _now_ts() -> int:
@@ -103,17 +109,27 @@ def _search_hltb(
     return _pick_best_match(candidates, game_name, alias_names)
 
 
+def _zero_to_none(value):
+    if value is None:
+        return None
+    if isinstance(value, float):
+        return value if value != 0.0 else None
+    if isinstance(value, int):
+        return value if value != 0 else None
+    return value
+
+
 def _build_patch(entry: HowLongToBeatEntry) -> dict:
     return {
         "hltb_id": str(entry.game_id),
         "hltb_name": entry.game_name,
-        "hltb_main_story": entry.main_story,
-        "hltb_main_extra": entry.main_extra,
-        "hltb_completionist": entry.completionist,
-        "hltb_all_styles": entry.all_styles,
-        "hltb_coop": entry.coop_time,
-        "hltb_multiplayer": entry.mp_time,
-        "hltb_review_score": entry.review_score,
+        "hltb_main_story": _zero_to_none(entry.main_story),
+        "hltb_main_extra": _zero_to_none(entry.main_extra),
+        "hltb_completionist": _zero_to_none(entry.completionist),
+        "hltb_all_styles": _zero_to_none(entry.all_styles),
+        "hltb_coop": _zero_to_none(entry.coop_time),
+        "hltb_multiplayer": _zero_to_none(entry.mp_time),
+        "hltb_review_score": _zero_to_none(entry.review_score),
         "review_count": None,
     }
 
@@ -140,17 +156,26 @@ async def sync_hltb_metadata(*, force: bool = False) -> None:
     errors = 0
 
     for game in games:
+        normalized_name = " ".join(game.name.casefold().split())
+        if normalized_name in _IGNORED_CATEGORIES:
+            log.info("[%d/%d] Skip (non-game) %r", processed + 1, len(games), game.name)
+            skipped += 1
+            processed += 1
+            continue
+
         async with AsyncSessionLocal() as session:
             existing = await session.execute(
                 select(GameMetadataHLTB).where(GameMetadataHLTB.game_id == game.id)
             )
             row = existing.scalar_one_or_none()
 
-            if row is not None and not force:
-                processed += 1
+            if row is not None and row.hltb_id is not None and not force:
+                log.info(
+                    "[%d/%d] Skip (already has HLTB id=%s) %r",
+                    processed + 1, len(games), row.hltb_id, game.name,
+                )
                 skipped += 1
-                if processed % 50 == 0:
-                    log.info("Progress: %d/%d", processed, len(games))
+                processed += 1
                 continue
 
             alias_result = await session.execute(
@@ -158,25 +183,37 @@ async def sync_hltb_metadata(*, force: bool = False) -> None:
             )
             alias_names = [r[0] for r in alias_result.all() if r[0]]
 
-        try:
-            entry = await asyncio.to_thread(
-                _search_hltb, client, game.name, alias_names
-            )
-        except Exception as exc:
-            log.warning("Error searching HLTB for %r: %s", game.name, exc)
-            errors += 1
-            processed += 1
-            continue
+        entry = None
+        for attempt in range(1, HLTB_MAX_RETRIES + 1):
+            try:
+                entry = await asyncio.to_thread(
+                    _search_hltb, client, game.name, alias_names
+                )
+                break
+            except (ConnectionResetError, ConnectionAbortedError, TimeoutError) as exc:
+                log.warning(
+                    "[%d/%d] Connection error on attempt %d/%d for %r: %s",
+                    processed + 1, len(games), attempt, HLTB_MAX_RETRIES, game.name, exc,
+                )
+                if attempt < HLTB_MAX_RETRIES:
+                    await asyncio.sleep(HLTB_RETRY_DELAY * attempt)
+            except Exception as exc:
+                log.warning("[%d/%d] Error for %r: %s", processed + 1, len(games), game.name, exc)
+                break
 
         if entry is None:
-            log.debug("No HLTB match for %r", game.name)
+            log.info("[%d/%d] No match %r", processed + 1, len(games), game.name)
             skipped += 1
             processed += 1
-            if processed % 50 == 0:
-                log.info("Progress: %d/%d", processed, len(games))
+            await asyncio.sleep(HLTB_DELAY_SECONDS)
             continue
 
         patch = _build_patch(entry)
+        match_info = (
+            f"sim={entry.similarity:.2f} hltb_id={entry.game_id} "
+            f"'{patch.get('hltb_main_story') or '?'}/{patch.get('hltb_main_extra') or '?'}"
+            f"/{patch.get('hltb_completionist') or '?'}h"
+        )
 
         async with AsyncSessionLocal() as session:
             existing = await session.execute(
@@ -199,13 +236,16 @@ async def sync_hltb_metadata(*, force: bool = False) -> None:
                 inserted += 1
             await session.commit()
 
-        processed += 1
-        if processed % 25 == 0:
-            log.info(
-                "Progress: %d/%d (inserted=%d, updated=%d, skipped=%d, errors=%d)",
-                processed, len(games), inserted, updated, skipped, errors,
-            )
+        log.info(
+            "[%d/%d] %s %r -> %r (%s)",
+            processed + 1, len(games),
+            "Updated" if row is not None else "Inserted",
+            game.name,
+            entry.game_name,
+            match_info,
+        )
 
+        processed += 1
         await asyncio.sleep(HLTB_DELAY_SECONDS)
 
     log.info(
