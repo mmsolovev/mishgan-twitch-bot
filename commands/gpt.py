@@ -4,7 +4,7 @@ from twitchio.ext import commands
 
 from config.settings import ADMINS
 from services.command_registry import register_command
-from services.gpt_service import ask_gpt
+from services.openrouter_service import ask_openrouter
 from utils.cooldowns import check_cooldown
 from utils.delays import human_delay
 
@@ -42,7 +42,7 @@ def setup(bot):
         await human_delay()
 
         try:
-            answer = await asyncio.wait_for(ask_gpt(question), timeout=15)
+            answer = await asyncio.wait_for(ask_openrouter(question), timeout=30)
 
             if not answer:
                 await ctx.send("MrDestructoid Я не знаю ответа")

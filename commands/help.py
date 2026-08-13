@@ -56,7 +56,7 @@ def setup(bot):
                 message += " | "
             message += "для не только лишь всех: " + ", ".join(sorted(mod_cmds))
 
-        message += f" | Подробная информация о командах на листе БОТ тут: {GAMES_SHEET_URL}"
+        message += f" | Подробная информация о командах на листе БОТ: {GAMES_SHEET_URL}"
 
         await ctx.send(message)
 
