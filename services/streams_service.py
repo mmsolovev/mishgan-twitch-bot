@@ -20,7 +20,7 @@ class StreamLookupResult:
 
 def _doc_suffix() -> str:
     if GAMES_SHEET_URL:
-        return f" | Информация о всех стримах и играх канала тут {GAMES_SHEET_URL}"
+        return f" | Информация о всех стримах канала {GAMES_SHEET_URL}"
     return " Таблица стримов: ссылка не настроена"
 
 
