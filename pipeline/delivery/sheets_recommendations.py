@@ -4,8 +4,19 @@ from __future__ import annotations
 Google Sheets delivery: Recommendations worksheet sync (released games list).
 """
 
-from database.db import SessionLocal
-from database.models import RecommendedGame
+from datetime import datetime
+
+from database.db import AsyncSessionLocal
+from database.models import (
+    Game,
+    GameMetadataIGDB,
+    Genre,
+    Platform,
+    User,
+    game_genres,
+    game_platforms,
+    game_recommendations,
+)
 from config.settings import RECOMMENDATIONS_SHEET_NAME
 from pipeline.delivery.sheets_utils import (
     build_hyperlink_formula,
@@ -16,7 +27,8 @@ from pipeline.delivery.sheets_utils import (
     get_client,
     get_or_create_worksheet as _get_or_create_worksheet,
 )
-from services.recommendations_service import STATUS_RELEASED, refresh_recommendation_lifecycle
+from services.recommendations_service import refresh_recommendation_lifecycle
+from sqlalchemy import select, func
 
 
 def _format_recommendations_sheet(sheet, row_count):
@@ -86,38 +98,106 @@ def _format_recommendations_sheet(sheet, row_count):
     })
 
 
-def _build_recommendation_row(recommendation):
-    steam = build_hyperlink_formula(recommendation.steam_url)
+async def _get_game_tags(session, game_id: int) -> tuple[str, str]:
+    genres_result = await session.execute(
+        select(func.coalesce(Genre.abbreviation, Genre.name))
+        .join(game_genres, game_genres.c.genre_id == Genre.id)
+        .where(game_genres.c.game_id == game_id)
+    )
+    genres_text = ", ".join(row[0] for row in genres_result.all())
+
+    platforms_result = await session.execute(
+        select(func.coalesce(Platform.abbreviation, Platform.name))
+        .join(game_platforms, game_platforms.c.platform_id == Platform.id)
+        .where(game_platforms.c.game_id == game_id)
+    )
+    platforms_text = ", ".join(row[0] for row in platforms_result.all())
+
+    return platforms_text, genres_text
+
+
+async def _get_game_recommenders(session, game_id: int) -> list[dict]:
+    result = await session.execute(
+        select(User.login, User.display_name)
+        .join(game_recommendations, game_recommendations.c.user_id == User.id)
+        .where(game_recommendations.c.game_id == game_id)
+    )
+    return [{"user_login": row[0], "display_name": row[1]} for row in result.all()]
+
+
+def _build_recommendation_row(data):
+    steam = build_hyperlink_formula(data.get("steam_url"))
+    platforms_text, genres_text = data.get("platforms_text", ""), data.get("genres_text", "")
     return [
-        recommendation.release_date.strftime("%d.%m.%Y") if recommendation.release_date else "",
-        len(recommendation.votes),
-        recommendation.title,
+        data["release_date"].strftime("%d.%m.%Y") if data.get("release_date") else "",
+        data["votes_count"],
+        data["name"],
         steam,
-        format_rating_value(recommendation),
-        build_tags_text(recommendation),
+        format_rating_value(data.get("igdb_score")),
+        build_tags_text(platforms_text, genres_text),
         "",
         "",
-        build_recommenders_text(recommendation),
+        build_recommenders_text(data.get("recommenders") or []),
     ]
 
 
-def sync_recommendations_safe() -> None:
-    refresh_recommendation_lifecycle()
+async def sync_recommendations_safe() -> None:
+    await refresh_recommendation_lifecycle()
 
     client = get_client()
     sheet = _get_or_create_worksheet(client, RECOMMENDATIONS_SHEET_NAME)
 
-    session = SessionLocal()
     values = sheet.get_all_values()
     data_rows = values[8:] if len(values) > 8 else []
 
-    recommendations = (
-        session.query(RecommendedGame)
-        .filter(RecommendedGame.status == STATUS_RELEASED, RecommendedGame.release_date.is_not(None))
-        .order_by(RecommendedGame.release_date.asc(), RecommendedGame.title.asc())
-        .all()
-    )
-    rows = [_build_recommendation_row(recommendation) for recommendation in recommendations]
+    now = datetime.utcnow()
+
+    async with AsyncSessionLocal() as session:
+        subq = (
+            select(game_recommendations.c.game_id)
+            .group_by(game_recommendations.c.game_id)
+            .having(func.count() > 0)
+        )
+
+        games_result = await session.execute(
+            select(Game)
+            .join(GameMetadataIGDB, GameMetadataIGDB.game_id == Game.id)
+            .where(
+                Game.id.in_(subq),
+                GameMetadataIGDB.release_date.is_not(None),
+                GameMetadataIGDB.release_date <= now,
+            )
+            .order_by(GameMetadataIGDB.release_date.asc(), Game.name.asc())
+        )
+        games = games_result.scalars().unique().all()
+
+        dataset_rows = []
+        for game in games:
+            igdb_result = await session.execute(
+                select(GameMetadataIGDB).where(GameMetadataIGDB.game_id == game.id).limit(1)
+            )
+            igdb = igdb_result.scalar_one_or_none()
+
+            votes_result = await session.execute(
+                select(func.count()).where(game_recommendations.c.game_id == game.id)
+            )
+            votes_count = votes_result.scalar_one() or 0
+
+            platforms_text, genres_text = await _get_game_tags(session, game.id)
+            recommenders = await _get_game_recommenders(session, game.id)
+
+            dataset_rows.append({
+                "name": game.name,
+                "release_date": igdb.release_date if igdb else None,
+                "steam_url": igdb.steam_url if igdb else None,
+                "igdb_score": igdb.igdb_score if igdb else None,
+                "votes_count": votes_count,
+                "platforms_text": platforms_text,
+                "genres_text": genres_text,
+                "recommenders": recommenders,
+            })
+
+    rows = [_build_recommendation_row(data) for data in dataset_rows]
 
     current_rows = [comparable_row(row, 9) for row in data_rows]
     comparable_final_rows = [comparable_row(row, 9) for row in rows]
@@ -130,8 +210,6 @@ def sync_recommendations_safe() -> None:
         print(f"Recommendations synced: {len(rows)}")
     else:
         print("Recommendations already in sync")
-
-    session.close()
 
 
 __all__ = ["sync_recommendations_safe"]

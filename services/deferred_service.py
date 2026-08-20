@@ -37,8 +37,8 @@ class RecommendationSheetsSyncScheduler:
             async with self._lock:
                 self.logger.info("Starting recommendations sheets sync (%s)", reason)
                 try:
-                    await asyncio.to_thread(sync_releases_safe)
-                    await asyncio.to_thread(sync_recommendations_safe)
+                    await sync_releases_safe()
+                    await sync_recommendations_safe()
                 except Exception:
                     self.logger.exception("Recommendations sheets sync failed")
                 else:

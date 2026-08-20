@@ -2,17 +2,19 @@ import re
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 
-from sqlalchemy.orm import joinedload
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 
 from config.settings import GAMES_SHEET_URL
-from database.db import SessionLocal
+from database.db import AsyncSessionLocal
 from database.models import Stream, StreamGame
 
 
 @dataclass
 class StreamLookupResult:
     date: object
-    duration: float | None
+    duration_minutes: int | None
     games: list[str]
 
 
@@ -28,11 +30,11 @@ def _format_datetime(value) -> str:
     return value.strftime("%d.%m.%Y %H:%M")
 
 
-def _format_hours(value: float | None) -> str:
+def _format_hours(value: int | None) -> str:
     if value is None:
         return "н/д"
-
-    formatted = f"{value:.1f}".rstrip("0").rstrip(".")
+    hours = value / 60
+    formatted = f"{hours:.1f}".rstrip("0").rstrip(".")
     return f"{formatted}ч"
 
 
@@ -75,31 +77,28 @@ def _parse_date(value: str) -> datetime | None:
     return None
 
 
-def _load_streams_for_date(target_date: datetime) -> list[StreamLookupResult]:
-    session = SessionLocal()
-
-    try:
+async def _load_streams_for_date(target_date: datetime) -> list[StreamLookupResult]:
+    async with AsyncSessionLocal() as session:
         day_start = target_date.replace(hour=0, minute=0, second=0, microsecond=0)
         day_end = day_start + timedelta(days=1)
 
-        streams = (
-            session.query(Stream)
-            .options(joinedload(Stream.stream_games).joinedload(StreamGame.game))
-            .filter(Stream.date >= day_start, Stream.date < day_end)
-            .order_by(Stream.date.asc())
-            .all()
+        q = (
+            select(Stream)
+            .options(selectinload(Stream.stream_games).selectinload(StreamGame.game))
+            .where(Stream.started_at >= day_start, Stream.started_at < day_end)
+            .order_by(Stream.started_at.asc())
         )
+        result = await session.execute(q)
+        streams = result.scalars().all()
 
         return [
             StreamLookupResult(
-                date=stream.date,
-                duration=stream.duration,
-                games=[stream_game.game.name for stream_game in stream.stream_games],
+                date=stream.started_at,
+                duration_minutes=stream.duration_minutes,
+                games=[sg.game.name for sg in stream.stream_games if sg.game],
             )
             for stream in streams
         ]
-    finally:
-        session.close()
 
 
 def build_streams_help_message() -> str:
@@ -110,7 +109,7 @@ def build_streams_help_message() -> str:
     )
 
 
-def build_stream_response(query: str) -> str:
+async def build_stream_response(query: str) -> str:
     query = (query or "").strip()
     if not query:
         return build_streams_help_message()
@@ -122,12 +121,12 @@ def build_stream_response(query: str) -> str:
             + _doc_suffix()
         )
 
-    matches = _load_streams_for_date(target_date)
+    matches = await _load_streams_for_date(target_date)
     if not matches:
         return f"Стримов за дату {target_date.strftime('%d.%m.%Y')} не нахожу" + _doc_suffix()
 
     parts = [
-        f"Дата и время: {_format_datetime(match.date)} | Длительность: {_format_hours(match.duration)} | Игры: {_format_games(match.games)}"
+        f"Дата и время: {_format_datetime(match.date)} | Длительность: {_format_hours(match.duration_minutes)} | Игры: {_format_games(match.games)}"
         for match in matches
     ]
 

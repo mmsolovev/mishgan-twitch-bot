@@ -1,42 +1,59 @@
 from __future__ import annotations
 
-
-
 """
 Google Sheets delivery: Streams worksheet sync.
 """
 
-from pathlib import Path
-
-from database.db import SessionLocal
-from database.models import Stream
+from database.db import AsyncSessionLocal
+from database.models import Stream, StreamGame, User, StreamRecording, streamers_on_stream
 from config.settings import SPREADSHEET_NAME, STREAMS_SHEET_NAME
 from pipeline.delivery.sheets_utils import build_hyperlink_formula, get_client
 from pipeline.transform.sheets_transform import normalize_row as _normalize_row
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 
 
 def _stream_display_date(stream: Stream) -> str:
-    return stream.date.strftime("%d.%m.%Y\n%H:%M")
+    return stream.started_at.strftime("%d.%m.%Y\n%H:%M")
 
 
-def _build_stream_row(stream: Stream) -> list:
-    games = " -> ".join(stream_game.game.name for stream_game in stream.stream_games)
-    participants = " ".join(participant.display_name for participant in stream.participants)
-    vod = build_hyperlink_formula(stream.vod_url, "Twitch")
-    clips = build_hyperlink_formula(stream.clips_url, "Клипы")
+async def _build_stream_row(session: AsyncSession, stream: Stream) -> list:
+    games = " -> ".join(
+        sg.game.name for sg in stream.stream_games if sg.game
+    )
+
+    result = await session.execute(
+        select(User.display_name)
+        .join(streamers_on_stream, streamers_on_stream.c.streamer_id == User.id)
+        .where(streamers_on_stream.c.stream_id == stream.id)
+    )
+    participants = " ".join(row[0] for row in result.all() if row[0])
+
+    vod_result = await session.execute(
+        select(StreamRecording.url)
+        .where(StreamRecording.stream_id == stream.id, StreamRecording.source == "twitch")
+        .limit(1)
+    )
+    vod_url = vod_result.scalar_one_or_none()
+
+    duration_str = ""
+    if stream.duration_minutes is not None:
+        hours = stream.duration_minutes / 60
+        duration_str = f"{hours:.1f}".rstrip("0").rstrip(".")
 
     return [
         _stream_display_date(stream),
-        stream.duration,
-        stream.title,
+        duration_str,
+        stream.title or "",
         games,
-        vod,
-        clips,
+        build_hyperlink_formula(vod_url, "Twitch") if vod_url else "",
         "",
         "",
         "",
         "",
-        stream.genres_text or "",
+        "",
+        "",
         participants,
     ]
 
@@ -140,38 +157,25 @@ def _stream_comparable_row(row):
     return [str(value) for value in normalized_row]
 
 
-def _build_stream_comparable_row(stream: Stream, manual_columns=None) -> list[str]:
-    row = _build_stream_row(stream)
-    comparable = [
-        _stream_display_date(stream),
-        str(row[1]),
-        str(row[2]),
-        str(row[3]),
-        str(row[4]),
-        str(row[5]),
-        "",
-        "",
-        "",
-        "",
-        str(row[10]),
-        str(row[11]),
-    ]
-
+def _build_stream_comparable_row(row: list, manual_columns=None) -> list[str]:
+    comparable = [str(value) for value in row]
     if manual_columns is not None:
-        # G-J оставляем ручными, а K (genres_text) всегда из БД.
         comparable[6:10] = [str(value) for value in manual_columns]
-
     return comparable
 
 
-def sync_streams() -> None:
+async def sync_streams() -> None:
     client = get_client()
     sheet = client.open(SPREADSHEET_NAME).worksheet(STREAMS_SHEET_NAME)
 
-    session = SessionLocal()
-    streams = session.query(Stream).order_by(Stream.date.desc()).all()
-    rows = [_build_stream_row(stream) for stream in streams]
-    session.close()
+    async with AsyncSessionLocal() as session:
+        result = await session.execute(
+            select(Stream)
+            .options(selectinload(Stream.stream_games).selectinload(StreamGame.game))
+            .order_by(Stream.started_at.desc())
+        )
+        streams = result.scalars().unique().all()
+        rows = [await _build_stream_row(session, stream) for stream in streams]
 
     sheet.batch_clear(["A9:L1000"])
     if rows:
@@ -181,11 +185,17 @@ def sync_streams() -> None:
     print(f"Streams synced: {len(rows)}")
 
 
-def sync_streams_safe() -> None:
+async def sync_streams_safe() -> None:
     client = get_client()
     sheet = client.open(SPREADSHEET_NAME).worksheet(STREAMS_SHEET_NAME)
 
-    session = SessionLocal()
+    async with AsyncSessionLocal() as session:
+        result = await session.execute(
+            select(Stream)
+            .options(selectinload(Stream.stream_games).selectinload(StreamGame.game))
+            .order_by(Stream.started_at.desc())
+        )
+        streams = result.scalars().unique().all()
 
     values = sheet.get_all_values()
     data_rows = values[8:] if len(values) > 8 else []
@@ -197,24 +207,21 @@ def sync_streams_safe() -> None:
         if key[0] and key[1]:
             existing[key] = normalized_row
 
-    streams = session.query(Stream).order_by(Stream.date.desc()).all()
     final_rows = []
     comparable_final_rows = []
 
-    for stream in streams:
-        row = _build_stream_row(stream)
-        row_key = (_stream_display_date(stream), stream.title)
-
-        if row_key in existing:
-            old_row = existing[row_key]
-            # G-J оставляем ручными, а K (genres_text) всегда из БД.
-            row[6:10] = old_row[6:10]
-            comparable_row = _build_stream_comparable_row(stream, manual_columns=old_row[6:10])
-        else:
-            comparable_row = _build_stream_comparable_row(stream)
-
-        final_rows.append(row)
-        comparable_final_rows.append(comparable_row)
+    async with AsyncSessionLocal() as session:
+        for stream in streams:
+            row = await _build_stream_row(session, stream)
+            row_key = (_stream_display_date(stream), stream.title)
+            if row_key in existing:
+                old_row = existing[row_key]
+                row[6:10] = old_row[6:10]
+                comp_row = _build_stream_comparable_row(row, manual_columns=old_row[6:10])
+            else:
+                comp_row = _build_stream_comparable_row(row)
+            final_rows.append(row)
+            comparable_final_rows.append(comp_row)
 
     current_rows = [_stream_comparable_row(row) for row in data_rows]
 
@@ -226,8 +233,6 @@ def sync_streams_safe() -> None:
         print(f"Reordered and synced {len(final_rows)} streams")
     else:
         print("Streams already in sync")
-
-    session.close()
 
 
 __all__ = ["sync_streams", "sync_streams_safe"]

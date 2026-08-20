@@ -241,3 +241,9 @@ __marimo__/
 !/storage/movies/*.example.json
 /har_and_cookies/.models/
 /storage/db_project.txt
+/.env.env.bak
+
+# Alembic (содержит локальные настройки подключения к БД)
+alembic.ini
+/storage/logs/bot.log.1
+

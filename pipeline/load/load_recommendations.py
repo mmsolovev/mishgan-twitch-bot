@@ -1,452 +1,354 @@
 from __future__ import annotations
 
 """
-Load layer: writes targeting `recommended_games` and related tables (RecommendedGame, RecommendedGameVote).
-
-This module is the single entry-point for recommendations persistence.
+Load layer: writes targeting `games`, `game_metadata_igdb`, `game_recommendations`,
+`streamer_games` tables — replaces old RecommendedGame / RecommendedGameVote.
 """
 
-from collections.abc import Iterable
-from datetime import datetime
+from datetime import datetime, timezone
 
-from sqlalchemy.orm import Session, joinedload
+from sqlalchemy import select, delete
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 
-from database.models import Game, RecommendedGame, RecommendedGameVote
-from pipeline.transform.recommendations_transform import (
-    STATUS_RELEASED,
-    STATUS_STREAMED,
-    STATUS_UPCOMING,
-    STATUS_DELETABLE_IGDB,
-    determine_recommendation_status,
-    normalize_recommendation_name,
-    normalize_user_login,
+from database.models import (
+    Game,
+    GameMetadataIGDB,
+    GameAlias,
+    game_recommendations,
+    streamer_games,
 )
-from pipeline.transform.sheets_transform import normalize_row, parse_sheet_bool
+from pipeline.transform.recommendations_transform import normalize_recommendation_name, normalize_user_login
+from services.user_service import get_or_create_user_by_login
 
 
-ACTIVE_RECOMMENDATION_STATUSES = {STATUS_UPCOMING, STATUS_RELEASED}
+ACTIVE_RECOMMENDATION_STATUSES = {"upcoming", "released"}
 
 
-def existing_recommendation_titles(session: Session) -> set[str]:
-    return {str(r[0]) for r in session.query(RecommendedGame.title).all() if r and r[0]}
+async def existing_recommendation_titles(session: AsyncSession) -> set[str]:
+    result = await session.execute(select(Game.name))
+    return {str(r[0]) for r in result.all() if r and r[0]}
 
 
-def find_recommendation_by_normalized_name(session: Session, normalized_name: str) -> RecommendedGame | None:
+async def find_game_by_normalized_name(session: AsyncSession, normalized_name: str) -> Game | None:
     if not normalized_name:
         return None
-    return session.query(RecommendedGame).filter_by(normalized_name=normalized_name).first()
-
-
-def find_recommendation_by_query(session: Session, query: str) -> RecommendedGame | None:
-    normalized_name = normalize_recommendation_name(query)
-    if not normalized_name:
-        return None
-
-    return (
-        session.query(RecommendedGame)
-        .options(joinedload(RecommendedGame.votes))
-        .filter_by(normalized_name=normalized_name)
-        .first()
+    result = await session.execute(
+        select(Game).join(GameAlias, GameAlias.game_id == Game.id)
+        .where(GameAlias.normalized_alias == normalized_name)
+        .limit(1)
     )
+    return result.scalar_one_or_none()
 
 
-def add_vote(
-    session: Session,
-    recommendation: RecommendedGame,
+async def find_game_by_query(session: AsyncSession, query: str) -> Game | None:
+    normalized = normalize_recommendation_name(query)
+    if not normalized:
+        return None
+    result = await session.execute(
+        select(Game).join(GameAlias, GameAlias.game_id == Game.id)
+        .where(GameAlias.normalized_alias == normalized)
+        .limit(1)
+    )
+    return result.scalar_one_or_none()
+
+
+async def find_game_with_igdb(session: AsyncSession, normalized_name: str) -> Game | None:
+    if not normalized_name:
+        return None
+    result = await session.execute(
+        select(Game)
+        .options(selectinload(Game.igdb_metadata))
+        .join(GameAlias, GameAlias.game_id == Game.id)
+        .where(GameAlias.normalized_alias == normalized_name)
+        .limit(1)
+    )
+    return result.scalar_one_or_none()
+
+
+async def add_recommendation(
+    session: AsyncSession,
+    game: Game,
     user_login: str,
-    user_display_name: str,
     *,
-    created_at: datetime | None = None,
+    note: str | None = None,
 ) -> bool:
     normalized_login = normalize_user_login(user_login)
     if not normalized_login:
         raise ValueError("user_login is required")
 
-    existing_vote = (
-        session.query(RecommendedGameVote)
-        .filter_by(recommended_game_id=recommendation.id, user_login=normalized_login)
-        .first()
+    user = await get_or_create_user_by_login(session, normalized_login)
+
+    existing = await session.execute(
+        select(game_recommendations).where(
+            game_recommendations.c.user_id == user.id,
+            game_recommendations.c.game_id == game.id,
+        )
     )
-    if existing_vote:
+    if existing.first():
         return False
 
-    now = created_at or datetime.utcnow()
-    vote = RecommendedGameVote(
-        recommended_game=recommendation,
-        user_login=normalized_login,
-        user_display_name=(user_display_name or user_login or "").strip() or normalized_login,
-        created_at=now,
+    session.execute(
+        game_recommendations.insert().values(user_id=user.id, game_id=game.id, recommendation_note=note)
     )
-    session.add(vote)
-    recommendation.updated_at = now
-    session.flush()
+    await session.flush()
     return True
 
 
-def create_recommendation(
-    session: Session,
-    query_name: str,
-    title: str,
+async def create_game(
+    session: AsyncSession,
+    name: str,
     *,
+    slug: str | None = None,
+) -> Game:
+    normalized = normalize_recommendation_name(name)
+    if not normalized:
+        raise ValueError("Game name is empty")
+
+    now = datetime.now(timezone.utc)
+    if not slug:
+        slug = name.lower().replace(" ", "-")
+
+    game = Game(name=name.strip(), slug=slug, created_at=now, updated_at=now)
+    session.add(game)
+    await session.flush()
+
+    alias = GameAlias(
+        game_id=game.id,
+        alias=name.strip(),
+        normalized_alias=normalized,
+        is_primary=True,
+        source="manual",
+        created_at=now,
+    )
+    session.add(alias)
+    await session.flush()
+    return game
+
+
+async def create_game_with_igdb(
+    session: AsyncSession,
+    *,
+    name: str,
+    igdb_id: str | None = None,
     release_date: datetime | None = None,
-    release_precision: str = "unknown",
-    description_short: str | None = None,
     steam_url: str | None = None,
-    rating_text: str | None = None,
-    platforms_text: str | None = None,
-    genres_text: str | None = None,
+    igdb_score: float | None = None,
+    description_ru: str | None = None,
     cover_url: str | None = None,
-    source_name: str | None = None,
-    source_game_id: str | None = None,
-    source_payload: str | None = None,
-    status: str | None = None,
-) -> RecommendedGame:
-    normalized_name = normalize_recommendation_name(title or query_name)
-    if not normalized_name:
-        raise ValueError("Recommendation query/title is empty")
+    raw_payload: str | None = None,
+) -> Game:
+    normalized = normalize_recommendation_name(name)
+    if not normalized:
+        raise ValueError("Game name is empty")
 
-    now = datetime.utcnow()
-    recommendation = RecommendedGame(
-        query_name=(query_name or title).strip(),
-        normalized_name=normalized_name,
-        title=title.strip(),
-        status=status or determine_recommendation_status(release_date=release_date, source_name=source_name),
+    now = datetime.now(timezone.utc)
+    slug = name.lower().replace(" ", "-")
+
+    game = Game(name=name.strip(), slug=slug, created_at=now, updated_at=now)
+    session.add(game)
+    await session.flush()
+
+    alias = GameAlias(
+        game_id=game.id,
+        alias=name.strip(),
+        normalized_alias=normalized,
+        is_primary=True,
+        source="igdb",
+        created_at=now,
+    )
+    session.add(alias)
+
+    import json as _json
+    igdb_meta = GameMetadataIGDB(
+        game_id=game.id,
+        igdb_id=igdb_id or f"pending-{game.id}",
         release_date=release_date,
-        release_precision=release_precision,
-        description_short=description_short,
         steam_url=steam_url,
-        rating_text=rating_text,
-        platforms_text=platforms_text,
-        genres_text=genres_text,
+        igdb_score=igdb_score,
+        description_ru=description_ru,
         cover_url=cover_url,
-        source_name=source_name,
-        source_game_id=source_game_id,
-        source_payload=source_payload,
-        created_at=now,
-        updated_at=now,
-        last_checked_at=now,
+        raw_payload=_json.loads(raw_payload) if raw_payload else None,
+        synced_at=now,
     )
-    session.add(recommendation)
-    session.flush()
-    return recommendation
+    session.add(igdb_meta)
+    await session.flush()
+    return game
 
 
-def create_igdb_recommendation(
-    session: Session,
-    *,
-    normalized_name: str,
-    title: str,
-    status: str,
-    release_date,
-    steam_url: str | None,
-    rating_text: str | None,
-    platforms_text: str | None,
-    genres_text: str | None,
-    cover_url: str | None,
-    source_name: str | None,
-    source_game_id: str | None,
-    source_payload: str | None,
-    now: datetime,
-) -> RecommendedGame:
-    rec = RecommendedGame(
-        query_name="igdb",
-        normalized_name=normalized_name,
-        title=title,
-        status=status,
-        release_date=release_date,
-        release_precision="unknown",
-        description_short=None,
-        steam_url=steam_url,
-        rating_text=rating_text,
-        platforms_text=platforms_text,
-        genres_text=genres_text,
-        cover_url=cover_url,
-        source_name=source_name,
-        source_game_id=source_game_id,
-        source_payload=source_payload,
-        streamer_interested=False,
-        created_at=now,
-        updated_at=now,
-    )
-    session.add(rec)
-    session.flush()
-    return rec
-
-
-def add_igdb_vote(session: Session, *, recommended_game_id: int, now: datetime) -> None:
-    vote = RecommendedGameVote(
-        recommended_game_id=int(recommended_game_id),
-        user_login="igdb",
-        user_display_name="IGDB",
-        created_at=now,
-    )
-    session.add(vote)
-
-
-def _get_source_votes(recommendation: RecommendedGame, source_name: str) -> list[RecommendedGameVote]:
-    return [vote for vote in recommendation.votes if (vote.user_login or "").casefold() == source_name.casefold()]
-
-def _get_dominant_source(recommendation: RecommendedGame) -> str | None:
-    has_igdb_vote = any((v.user_login or "").casefold() == "igdb" for v in recommendation.votes)
-    if has_igdb_vote:
-        return "igdb"
-    
-    has_tabula_vote = any((v.user_login or "").casefold() == "tabula" for v in recommendation.votes)
-    if has_tabula_vote:
-        return "tabula"
-        
-    return None
-
-def sync_recommendation_matches(session: Session) -> int:
-    updated_count = 0
-
-    recommendations = (
-        session.query(RecommendedGame)
-        .options(joinedload(RecommendedGame.votes))
-        .filter(RecommendedGame.status.in_([STATUS_UPCOMING, STATUS_RELEASED, STATUS_STREAMED, STATUS_DELETABLE_IGDB]))
-        .all()
-    )
-
-    games_by_name = {
-        normalize_recommendation_name(game.name): game
-        for game in session.query(Game).all()
-        if game.name
-    }
-
-    for recommendation in recommendations:
-        original_status = recommendation.status
-        changed = False
-
-        # --- Deletion Phase ---
-        # First, check if an IGDB vote should be deleted without changing the status yet.
-        source_for_deletion_check = _get_dominant_source(recommendation)
-        status_for_deletion_check = determine_recommendation_status(
-            release_date=recommendation.release_date,
-            matched_game=None,  # Check for deletion independently of streamed status
-            streamer_interested=bool(recommendation.streamer_interested),
-            source_name=source_for_deletion_check,
+async def add_igdb_note(session: AsyncSession, game_id: int, user_login: str = "igdb") -> None:
+    user = await get_or_create_user_by_login(session, user_login)
+    existing = await session.execute(
+        select(game_recommendations).where(
+            game_recommendations.c.user_id == user.id,
+            game_recommendations.c.game_id == game_id,
         )
-
-        if status_for_deletion_check == STATUS_DELETABLE_IGDB and source_for_deletion_check == "igdb":
-            igdb_votes = _get_source_votes(recommendation, "igdb")
-            if igdb_votes and len(recommendation.votes) == len(igdb_votes):
-                session.delete(recommendation)
-                updated_count += 1
-                continue  # Skip to the next recommendation as this one is gone
-            elif igdb_votes:
-                for vote in igdb_votes:
-                    session.delete(vote)
-                # The recommendation object in memory now has its `votes` collection updated.
-                # We can now proceed to re-evaluate its status based on remaining votes.
-                changed = True
-
-        # --- Status Update Phase ---
-        # Now, determine the final status based on the *current* state of votes.
-        final_source_name = _get_dominant_source(recommendation)
-        
-        if final_source_name:
-            matched_game = None
-        else:
-            matched_game = games_by_name.get(recommendation.normalized_name)
-        
-        recommendation.matched_game = matched_game
-
-        final_status = determine_recommendation_status(
-            release_date=recommendation.release_date,
-            matched_game=matched_game,
-            streamer_interested=bool(recommendation.streamer_interested),
-            source_name=final_source_name,
+    )
+    if not existing.first():
+        session.execute(
+            game_recommendations.insert().values(user_id=user.id, game_id=game_id, recommendation_note="Игра популярна")
         )
-
-        if original_status != final_status:
-            recommendation.status = final_status
-            changed = True
-
-        if changed:
-            recommendation.updated_at = datetime.utcnow()
-            updated_count += 1
-
-    if updated_count > 0:
-        session.flush()
-
-    return updated_count
+        await session.flush()
 
 
-def find_existing_recommendation(
-    session: Session,
+async def find_existing_game(
+    session: AsyncSession,
     *,
     query: str,
     metadata_title: str | None = None,
-    source_name: str | None = None,
-    source_game_id: str | None = None,
-) -> RecommendedGame | None:
-    recommendation = find_recommendation_by_query(session, query)
-    if recommendation:
-        return recommendation
-
+) -> Game | None:
+    game = await find_game_by_query(session, query)
+    if game:
+        return game
     if metadata_title:
-        recommendation = find_recommendation_by_query(session, metadata_title)
-        if recommendation:
-            return recommendation
-
-    if source_name and source_game_id:
-        return (
-            session.query(RecommendedGame)
-            .options(joinedload(RecommendedGame.votes))
-            .filter_by(source_name=source_name, source_game_id=source_game_id)
-            .first()
-        )
-
+        game = await find_game_by_query(session, metadata_title)
+        if game:
+            return game
     return None
 
 
-def find_user_vote_for_recommendation(session: Session, recommendation_id: int, user_login: str) -> RecommendedGameVote | None:
-    return (
-        session.query(RecommendedGameVote)
-        .filter_by(recommended_game_id=recommendation_id, user_login=normalize_user_login(user_login))
-        .first()
-    )
-
-
-def load_user_active_votes(session: Session, user_login: str) -> list[RecommendedGameVote]:
-    return (
-        session.query(RecommendedGameVote)
-        .join(RecommendedGame, RecommendedGame.id == RecommendedGameVote.recommended_game_id)
-        .options(joinedload(RecommendedGameVote.recommended_game))
-        .filter(
-            RecommendedGameVote.user_login == normalize_user_login(user_login),
-            RecommendedGame.status.in_(ACTIVE_RECOMMENDATION_STATUSES),
+async def find_user_recommendation(session: AsyncSession, game_id: int, user_login: str) -> dict | None:
+    user = await get_or_create_user_by_login(session, normalize_user_login(user_login))
+    result = await session.execute(
+        select(game_recommendations).where(
+            game_recommendations.c.user_id == user.id,
+            game_recommendations.c.game_id == game_id,
         )
-        .order_by(RecommendedGameVote.created_at.asc(), RecommendedGameVote.id.asc())
-        .all()
     )
+    row = result.first()
+    return dict(row._mapping) if row else None
 
 
-def delete_recommendation_if_orphaned(session: Session, recommendation: RecommendedGame) -> bool:
-    refreshed = (
-        session.query(RecommendedGame)
-        .options(joinedload(RecommendedGame.votes))
-        .filter_by(id=recommendation.id)
-        .first()
+async def load_user_recommendations(session: AsyncSession, user_login: str) -> list[dict]:
+    user = await get_or_create_user_by_login(session, normalize_user_login(user_login))
+    result = await session.execute(
+        select(game_recommendations, Game)
+        .join(Game, Game.id == game_recommendations.c.game_id)
+        .where(game_recommendations.c.user_id == user.id)
+        .order_by(game_recommendations.c.created_at.asc())
     )
-    if refreshed and not refreshed.votes:
-        session.delete(refreshed)
-        session.flush()
+    return [dict(row._mapping) for row in result.all()]
+
+
+async def remove_recommendation(session: AsyncSession, user_id: int, game_id: int) -> None:
+    await session.execute(
+        delete(game_recommendations).where(
+            game_recommendations.c.user_id == user_id,
+            game_recommendations.c.game_id == game_id,
+        )
+    )
+    await session.flush()
+
+    remaining = await session.execute(
+        select(game_recommendations).where(game_recommendations.c.game_id == game_id).limit(1)
+    )
+    if not remaining.first():
+        game = await session.get(Game, game_id)
+        if game:
+            await session.delete(game)
+            await session.flush()
+
+
+async def iter_games_missing_short_description(session: AsyncSession, *, limit: int = 0) -> list[Game]:
+    q = (
+        select(Game)
+        .outerjoin(GameMetadataIGDB, Game.id == GameMetadataIGDB.game_id)
+        .where(
+            (GameMetadataIGDB.description_ru.is_(None)) | (GameMetadataIGDB.description_ru == "")
+        )
+    )
+    if int(limit) > 0:
+        q = q.limit(int(limit))
+    result = await session.execute(q)
+    return list(result.scalars().all())
+
+
+async def set_game_short_description(session: AsyncSession, game: Game, description_short: str) -> bool:
+    value = (description_short or "").strip()
+    if not value:
+        return False
+
+    result = await session.execute(select(GameMetadataIGDB).where(GameMetadataIGDB.game_id == game.id))
+    meta = result.scalar_one_or_none()
+    if meta is None:
+        return False
+    if (meta.description_ru or "").strip() == value:
+        return False
+    meta.description_ru = value
+    session.add(meta)
+    return True
+
+
+async def set_streamer_interested(session: AsyncSession, game_id: int, user_login: str, interested: bool) -> bool:
+    user = await get_or_create_user_by_login(session, normalize_user_login(user_login))
+    result = await session.execute(
+        select(streamer_games).where(
+            streamer_games.c.streamer_id == user.id,
+            streamer_games.c.game_id == game_id,
+        )
+    )
+    row = result.first()
+    if row is None:
+        session.execute(
+            streamer_games.insert().values(
+                streamer_id=user.id, game_id=game_id, interested=interested,
+                updated_at=datetime.now(timezone.utc),
+            )
+        )
+        await session.flush()
+        return True
+    if bool(row.interested) != interested:
+        await session.execute(
+            streamer_games.update()
+            .where(
+                streamer_games.c.streamer_id == user.id,
+                streamer_games.c.game_id == game_id,
+            )
+            .values(interested=interested, updated_at=datetime.now(timezone.utc))
+        )
+        await session.flush()
         return True
     return False
 
 
-def remove_vote(session: Session, vote: RecommendedGameVote) -> tuple[str, bool]:
-    title = vote.recommended_game.title
-    recommendation = vote.recommended_game
-    session.delete(vote)
-    session.flush()
-    deleted_recommendation = delete_recommendation_if_orphaned(session, recommendation)
-    return title, deleted_recommendation
-
-
-def iter_games_missing_short_description(session: Session, *, limit: int = 0) -> Iterable[RecommendedGame]:
-    q = session.query(RecommendedGame).filter(RecommendedGame.description_short.is_(None))
-    if int(limit) > 0:
-        q = q.limit(int(limit))
-    return q.all()
-
-
-def set_game_short_description(session: Session, game: RecommendedGame, description_short: str) -> bool:
-    """
-    Mutates `game` in-place. Commit/rollback is responsibility of the caller.
-    Returns True if the row was changed.
-    """
-    value = (description_short or "").strip()
-    if not value:
-        return False
-    if (game.description_short or "").strip() == value:
-        return False
-    game.description_short = value
-    session.add(game)
-    return True
-
-
-def apply_releases_manual_fields(session: Session, rows_by_title: dict[str, list], width: int = 12) -> int:
-    """
-    Updates manual fields from Sheets targeting `recommended_games`.
-    Commit/rollback is responsibility of the caller.
-    """
-    updated = 0
-
-    for title, row in (rows_by_title or {}).items():
-        recommendation = session.query(RecommendedGame).filter_by(title=title).first()
-        if not recommendation:
-            continue
-
-        normalized = normalize_row(row, width)
-        sheet_value = parse_sheet_bool(normalized[5])
-
-        # Preserve previous semantics from legacy sync:
-        # - TRUE always sets streamer_interested=True
-        # - FALSE does not override True once it's set
-        if sheet_value is True and recommendation.streamer_interested is not True:
-            recommendation.streamer_interested = True
-            updated += 1
-        elif sheet_value is False and recommendation.streamer_interested is False:
-            recommendation.streamer_interested = False
-
-    session.flush()
-    return updated
-
-
-def get_upcoming_igdb_games(session: Session) -> list[RecommendedGame]:
-    """
-    Returns all upcoming games that were sourced from IGDB and have a source_game_id.
-    """
-    return (
-        session.query(RecommendedGame)
-        .filter(
-            RecommendedGame.status == STATUS_UPCOMING,
-            RecommendedGame.source_name == "igdb",
-            RecommendedGame.source_game_id.isnot(None),
-        )
-        .all()
+async def get_upcoming_games(session: AsyncSession) -> list[Game]:
+    result = await session.execute(
+        select(Game)
+        .options(selectinload(Game.igdb_metadata))
+        .join(GameMetadataIGDB, Game.id == GameMetadataIGDB.game_id)
+        .where(GameMetadataIGDB.release_date > datetime.now(timezone.utc))
     )
+    return list(result.scalars().all())
 
 
-def update_release_dates(session: Session, games_to_update: list[RecommendedGame]) -> int:
-    """
-    Updates the release_date for a list of games.
-    """
+async def update_release_dates(session: AsyncSession, games_to_update: list[Game]) -> int:
     if not games_to_update:
         return 0
-
-    now = datetime.utcnow()
+    now = datetime.now(timezone.utc)
     for game in games_to_update:
         game.updated_at = now
         session.add(game)
-
-    session.flush()
+    await session.flush()
     return len(games_to_update)
 
 
 __all__ = [
     "ACTIVE_RECOMMENDATION_STATUSES",
-    "STATUS_RELEASED",
-    "STATUS_STREAMED",
-    "STATUS_UPCOMING",
-    "add_igdb_vote",
-    "add_vote",
-    "apply_releases_manual_fields",
-    "create_igdb_recommendation",
-    "create_recommendation",
-    "delete_recommendation_if_orphaned",
+    "add_igdb_note",
+    "add_recommendation",
+    "create_game",
+    "create_game_with_igdb",
     "existing_recommendation_titles",
-    "find_existing_recommendation",
-    "find_recommendation_by_normalized_name",
-    "find_recommendation_by_query",
-    "find_user_vote_for_recommendation",
-    "get_upcoming_igdb_games",
+    "find_existing_game",
+    "find_game_by_normalized_name",
+    "find_game_by_query",
+    "find_game_with_igdb",
+    "find_user_recommendation",
+    "get_upcoming_games",
     "iter_games_missing_short_description",
-    "load_user_active_votes",
-    "remove_vote",
+    "load_user_recommendations",
+    "remove_recommendation",
     "set_game_short_description",
-    "sync_recommendation_matches",
+    "set_streamer_interested",
     "update_release_dates",
 ]

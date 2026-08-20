@@ -1,13 +1,14 @@
 from __future__ import annotations
 
 """
-Load layer: writes targeting `games_stats` table (GameStats).
+Load layer: writes targeting `game_stats` table (GameStats).
 """
 
 from dataclasses import dataclass
+from datetime import datetime, timezone
 
-from sqlalchemy import func
-from sqlalchemy.orm import Session
+from sqlalchemy import func, select
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from database.models import Game, GameStats, StreamGame
 from pipeline.ingest.twitchtracker_parser import TwitchTrackerGameRow
@@ -22,98 +23,80 @@ class SyncStats:
     deleted: int = 0
 
 
-def sync_game_stats(
-    session: Session,
+async def sync_game_stats(
+    session: AsyncSession,
     games_data: list[TwitchTrackerGameRow],
     game_cache: dict[str, Game],
     *,
     prune_missing: bool = False,
 ) -> SyncStats:
     stats = SyncStats()
-
     desired_game_ids: set[int] = set()
 
     for data in games_data:
-        game = get_or_create_game(session, game_cache, data.name)
+        game = await get_or_create_game(session, game_cache, data.name)
         desired_game_ids.add(int(game.id))
 
-        game_stats = session.get(GameStats, {"game_id": game.id, "period": "all"})
+        result = await session.execute(select(GameStats).where(GameStats.game_id == game.id))
+        game_stats = result.scalar_one_or_none()
         created = False
 
         if game_stats is None:
-            game_stats = GameStats(game_id=game.id, period="all")
+            game_stats = GameStats(game_id=game.id)
             session.add(game_stats)
+            await session.flush()
             created = True
 
         changed = created
 
-        for attr, value in (
-            ("hours_streamed", data.hours_streamed),
-            ("avg_viewers", data.avg_viewers),
-            ("max_viewers", data.max_viewers),
-            ("followers_per_hour", data.followers_per_hour),
-            ("last_stream", data.last_stream),
-        ):
-            if not hasattr(game_stats, attr):
-                continue
-            if getattr(game_stats, attr) != value:
+        field_map = {
+            "streamed_hours": data.hours_streamed,
+            "avg_viewers": data.avg_viewers,
+            "max_viewers": data.max_viewers,
+            "followers_per_hour": data.followers_per_hour,
+            "last_stream": data.last_stream,
+        }
+        for attr, value in field_map.items():
+            if getattr(game_stats, attr, None) != value:
                 setattr(game_stats, attr, value)
                 changed = True
 
+        game_stats.synced_at = datetime.now(timezone.utc)
+
         if created:
-            stats = SyncStats(
-                added=stats.added + 1,
-                updated=stats.updated,
-                unchanged=stats.unchanged,
-                deleted=stats.deleted,
-            )
+            stats = SyncStats(added=stats.added + 1, updated=stats.updated, unchanged=stats.unchanged, deleted=stats.deleted)
         elif changed:
-            stats = SyncStats(
-                added=stats.added,
-                updated=stats.updated + 1,
-                unchanged=stats.unchanged,
-                deleted=stats.deleted,
-            )
+            stats = SyncStats(added=stats.added, updated=stats.updated + 1, unchanged=stats.unchanged, deleted=stats.deleted)
         else:
-            stats = SyncStats(
-                added=stats.added,
-                updated=stats.updated,
-                unchanged=stats.unchanged + 1,
-                deleted=stats.deleted,
-            )
+            stats = SyncStats(added=stats.added, updated=stats.updated, unchanged=stats.unchanged + 1, deleted=stats.deleted)
 
     if prune_missing:
         deleted = 0
-        for row in session.query(GameStats).filter_by(period="all").all():
+        result = await session.execute(select(GameStats))
+        for row in result.scalars().all():
             if int(row.game_id) not in desired_game_ids:
-                session.delete(row)
+                await session.delete(row)
                 deleted += 1
 
         if deleted:
-            stats = SyncStats(
-                added=stats.added,
-                updated=stats.updated,
-                unchanged=stats.unchanged,
-                deleted=stats.deleted + deleted,
-            )
+            stats = SyncStats(added=stats.added, updated=stats.updated, unchanged=stats.unchanged, deleted=stats.deleted + deleted)
 
     return stats
 
 
-def update_streams_count(session: Session) -> int:
+async def update_streams_count(session: AsyncSession) -> int:
     """
-    Recomputes GameStats.streams_count for period='all' from stream_games table.
+    Recomputes GameStats.streams_count from stream_games table.
     Returns number of rows updated.
     """
-    counts_by_game_id = dict(
-        session.query(StreamGame.game_id, func.count(StreamGame.stream_id))
-        .group_by(StreamGame.game_id)
-        .all()
+    result = await session.execute(
+        select(StreamGame.game_id, func.count(StreamGame.stream_id)).group_by(StreamGame.game_id)
     )
+    counts_by_game_id = dict(result.all())
 
     updated = 0
-    rows = session.query(GameStats).filter_by(period="all").all()
-    for stats in rows:
+    result = await session.execute(select(GameStats))
+    for stats in result.scalars().all():
         new_value = int(counts_by_game_id.get(stats.game_id, 0))
         if int(stats.streams_count or 0) != new_value:
             stats.streams_count = new_value
@@ -123,4 +106,3 @@ def update_streams_count(session: Session) -> int:
 
 
 __all__ = ["SyncStats", "sync_game_stats", "update_streams_count"]
-

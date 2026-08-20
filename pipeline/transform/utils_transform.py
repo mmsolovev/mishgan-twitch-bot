@@ -29,9 +29,6 @@ def parse_csv(value: str | None) -> list[str]:
 
 
 def normalize_genre_token(token: str) -> str:
-    # Keep stable canonical token for Sheets and UI.
-    if normalize_key(token) == "role-playing (rpg)":
-        return "RPG"
     return token.strip()
 
 

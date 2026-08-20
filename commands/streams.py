@@ -28,6 +28,6 @@ def setup(bot):
             await ctx.send(build_streams_help_message())
             return
 
-        await ctx.send(build_stream_response(date_query))
+        await ctx.send(await build_stream_response(date_query))
 
     bot.add_command(streams_command)

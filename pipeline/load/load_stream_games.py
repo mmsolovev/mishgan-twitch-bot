@@ -1,10 +1,11 @@
 from __future__ import annotations
 
 """
-Load layer: writes targeting `stream_games` association table (StreamGame).
+Load layer: writes targeting `stream_games` table (StreamGame).
 """
 
-from sqlalchemy.orm import Session
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from database.models import Game, Stream, StreamGame
 from pipeline.load.load_games import get_or_create_game
@@ -21,7 +22,7 @@ def unique_in_order(values: list[str]) -> list[str]:
     return out
 
 
-def sync_stream_games(session: Session, stream: Stream, game_names: list[str], game_cache: dict[str, Game]) -> bool:
+async def sync_stream_games(session: AsyncSession, stream: Stream, game_names: list[str], game_cache: dict[str, Game]) -> bool:
     """
     Ensures Stream.stream_games match the given ordered list of names.
     Returns True if association changed.
@@ -32,21 +33,18 @@ def sync_stream_games(session: Session, stream: Stream, game_names: list[str], g
 
     existing_by_name = {sg.game.name: sg for sg in stream.stream_games}
 
-    # Remove missing.
     for game_name, stream_game in list(existing_by_name.items()):
         if game_name not in desired_set:
-            stream.stream_games.remove(stream_game)
+            await session.delete(stream_game)
             changed = True
 
-    # Rebuild map after removals.
-    existing_by_name = {sg.game.name: sg for sg in stream.stream_games}
+    existing_by_name = {sg.game.name: sg for sg in stream.stream_games if sg.game.name in desired_set}
 
-    # Upsert with correct positions.
     for position, game_name in enumerate(desired_names):
-        game = get_or_create_game(session, game_cache, game_name)
+        game = await get_or_create_game(session, game_cache, game_name)
         stream_game = existing_by_name.get(game_name)
         if stream_game is None:
-            stream.stream_games.append(StreamGame(game=game, position=position))
+            session.add(StreamGame(stream_id=stream.id, game_id=game.id, position=position))
             changed = True
         elif stream_game.position != position:
             stream_game.position = position
@@ -56,4 +54,3 @@ def sync_stream_games(session: Session, stream: Stream, game_names: list[str], g
 
 
 __all__ = ["sync_stream_games", "unique_in_order"]
-

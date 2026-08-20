@@ -1,48 +1,53 @@
 from __future__ import annotations
 
 """
-Load layer: writes targeting `participants` table (Participant) and its association with streams.
+Load layer: writes targeting `users` table (User) and `streamers_on_stream` M2M.
 """
 
-from sqlalchemy.orm import Session
 import re
 
-from database.models import Participant, Stream
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from database.models import User, Stream, streamers_on_stream
 from pipeline.load.load_stream_games import unique_in_order
-
-
-def get_or_create_participant(session: Session, name: str) -> Participant:
-    participant = session.query(Participant).filter_by(name=name).first()
-    if participant is None:
-        participant = Participant(name=name, display_name=f"@{name}")
-        session.add(participant)
-        session.flush()
-    return participant
+from services.user_service import get_or_create_user_by_login
 
 
 def extract_participants_from_title(title: str | None) -> list[str]:
     title = title or ""
-    # Legacy rule from import_json_to_db.py: @(\w+) -> lower() and unique in order
     return unique_in_order([name.lower() for name in re.findall(r"@(\w+)", title)])
 
 
-def sync_stream_participants_from_title(session: Session, stream: Stream, title: str | None) -> bool:
+async def sync_stream_participants_from_title(session: AsyncSession, stream: Stream, title: str | None) -> bool:
     desired_names = extract_participants_from_title(title)
     desired_set = set(desired_names)
     changed = False
 
-    existing_by_name = {p.name: p for p in stream.participants}
-    for name, participant in list(existing_by_name.items()):
-        if name not in desired_set:
-            stream.participants.remove(participant)
+    result = await session.execute(
+        select(User).join(streamers_on_stream, streamers_on_stream.c.streamer_id == User.id)
+        .where(streamers_on_stream.c.stream_id == stream.id)
+    )
+    current_users = result.scalars().all()
+    current_by_login = {u.login: u for u in current_users}
+
+    for login, user in list(current_by_login.items()):
+        if login not in desired_set:
+            await session.execute(
+                streamers_on_stream.delete().where(
+                    streamers_on_stream.c.stream_id == stream.id,
+                    streamers_on_stream.c.streamer_id == user.id,
+                )
+            )
             changed = True
 
-    existing_names = {p.name for p in stream.participants}
+    existing_logins = {u.login for u in current_users if u.login in desired_set}
     for name in desired_names:
-        if name in existing_names:
+        if name in existing_logins:
             continue
-        stream.participants.append(get_or_create_participant(session, name))
-        existing_names.add(name)
+        user = await get_or_create_user_by_login(session, name)
+        session.add(streamers_on_stream.insert().values(stream_id=stream.id, streamer_id=user.id))
+        existing_logins.add(name)
         changed = True
 
     return changed
@@ -50,7 +55,6 @@ def sync_stream_participants_from_title(session: Session, stream: Stream, title:
 
 __all__ = [
     "extract_participants_from_title",
-    "get_or_create_participant",
+    "get_or_create_user_by_login",
     "sync_stream_participants_from_title",
 ]
-

@@ -308,7 +308,7 @@ class EventSubService:
         await channel.send(message)
 
     async def build_game_change_message(self, game_name: str) -> str:
-        game_lookup = find_game_lookup(game_name)
+        game_lookup = await find_game_lookup(game_name)
         message_parts = []
 
         if game_lookup is None or game_lookup.streams_count <= 0:

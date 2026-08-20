@@ -11,13 +11,7 @@ AI short description generation is provided via `services.gpt_service` and may p
 import re
 from datetime import datetime, timedelta
 
-from typing import TYPE_CHECKING
-
 from services.gpt_service import generate_short_description
-from pipeline.transform.igdb_transform import parse_release_date
-
-if TYPE_CHECKING:
-    from database.models import Game, RecommendedGame
 
 
 STATUS_UPCOMING = "upcoming"
@@ -71,34 +65,12 @@ def determine_recommendation_status(
         return STATUS_UPCOMING if release_date > now else STATUS_RELEASED
 
 
-def find_games_to_update(
-    local_games: list[RecommendedGame], igdb_games: list[dict]
-) -> list[RecommendedGame]:
-    games_to_update: list[RecommendedGame] = []
-
-    igdb_games_by_id = {str(game.get("id")): game for game in igdb_games}
-
-    for local_game in local_games:
-        igdb_game = igdb_games_by_id.get(local_game.source_game_id)
-        if not igdb_game:
-            continue
-
-        igdb_release_date, _ = parse_release_date(igdb_game.get("first_release_date"))
-
-        if igdb_release_date and local_game.release_date != igdb_release_date:
-            local_game.release_date = igdb_release_date
-            games_to_update.append(local_game)
-
-    return games_to_update
-
-
 __all__ = [
     "STATUS_RELEASED",
     "STATUS_STREAMED",
     "STATUS_UPCOMING",
     "STATUS_DELETABLE_IGDB",
     "determine_recommendation_status",
-    "find_games_to_update",
     "generate_short_description",
     "normalize_recommendation_name",
     "normalize_user_login",

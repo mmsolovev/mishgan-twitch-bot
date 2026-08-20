@@ -7,8 +7,6 @@ Transform layer: parsing/normalization helpers for IGDB API payloads.
 from datetime import datetime, timezone
 
 _STEAM_HOST_MARKERS = ("store.steampowered.com", "steamcommunity.com", "steam://")
-_PC_MARKERS = {"pc (microsoft windows)", "linux", "mac"}
-_PS_MARKERS = {"playstation 5", "playstation 4", "playstation 3", "playstation 2", "playstation"}
 
 
 def parse_release_date(value: int | str | None) -> tuple[datetime | None, str]:
@@ -75,8 +73,6 @@ def normalize_genres_text(genres: list[dict] | None) -> str | None:
         if not isinstance(item, dict):
             continue
         name = str(item.get("name") or "").strip()
-        if name == "Role-playing (RPG)":
-            name = "RPG"
         if name:
             names.append(name)
             
@@ -87,17 +83,10 @@ def build_platforms_text(platforms: list[dict] | None) -> str | None:
     if not platforms:
         return None
 
-    names = [str(p.get("name") or "").strip().casefold() for p in platforms if isinstance(p, dict)]
+    names = [str(p.get("name") or "").strip() for p in platforms if isinstance(p, dict)]
     names = [n for n in names if n]
 
-    tags: list[str] = []
-    if any(n in _PC_MARKERS for n in names):
-        tags.append("PC")
-    if any(n in _PS_MARKERS for n in names):
-        tags.append("PS")
-
-    # keep stable output for Sheets
-    return ", ".join(tags) if tags else join_names(platforms)
+    return ", ".join(names) if names else None
 
 
 def extract_steam_url(websites: list[dict] | None) -> str | None:

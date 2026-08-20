@@ -8,8 +8,7 @@ Pipeline order:
 - load: sync streams and game stats
 - load: recompute streams_count
 - ingest/load: sync stream VOD URLs from Twitch API
-- ingest/transform/load: enrich games_meta from HLTB + IGDB
-- transform/load: fill streams.genres_text
+- ingest/load: enrich games from HLTB + IGDB
 """
 
 import asyncio
@@ -21,18 +20,16 @@ from typing import Any
 import aiohttp
 
 import config.settings as settings
-from database.db import SessionLocal
+from database.db import AsyncSessionLocal
 from database.models import Game, Stream
 from pipeline.ingest.hltb_client import search_best
 from pipeline.ingest.igdb_api import fetch_igdb_metadata
 from pipeline.ingest.twitch_api import TwitchTokenExpiredError, fetch_user_id, fetch_vods
 from pipeline.ingest.twitchtracker_parser import load_games_json, load_streams_json
 from pipeline.load.load_game_stats import sync_game_stats, update_streams_count
-from pipeline.load.load_game_meta import apply_games_meta_patch, select_enrichment_candidates
+from pipeline.load.load_game_meta import apply_igdb_patch, apply_hltb_patch, select_igdb_enrichment_candidates
 from pipeline.load.load_streams import sync_streams
-from pipeline.load.load_streams import get_stream_context, iter_streams_for_genres, set_stream_genres_text, sync_stream_vod_urls
-from pipeline.transform.games_transform import IgdbMetaView, build_patch
-from pipeline.transform.streams_transform import compute_stream_genres
+from sqlalchemy import select
 
 
 def _default_project_root() -> Path:
@@ -91,6 +88,8 @@ async def _sync_vods(session, *, only_stream_ids: set[int] | None = None) -> tup
         return (0, 0)
 
     from services.token_service import try_refresh_token
+    from pipeline.load.load_streams import VodSyncStats
+    from pipeline.transform.streams_transform import build_vods_index, is_match, pick_vod_candidates, StreamForVodMatch
 
     timeout = aiohttp.ClientTimeout(total=30)
     async with aiohttp.ClientSession(timeout=timeout) as http:
@@ -121,8 +120,55 @@ async def _sync_vods(session, *, only_stream_ids: set[int] | None = None) -> tup
             user_id=user_id,
         )
 
-    vod_stats = sync_stream_vod_urls(session, vods, only_stream_ids=only_stream_ids)
-    return (vod_stats.removed_outdated, vod_stats.matched_new)
+    vod_urls = {str(v.get("url") or "").strip() for v in vods}
+    vod_urls.discard("")
+    vods_by_date = build_vods_index(vods)
+
+    removed = 0
+    matched = 0
+
+    if only_stream_ids:
+        ids = [int(i) for i in only_stream_ids if int(i) > 0]
+        if not ids:
+            return (0, 0)
+
+    q = select(Stream)
+    if only_stream_ids:
+        q = q.where(Stream.id.in_(list(only_stream_ids)))
+    result = await session.execute(q)
+    streams = result.scalars().all()
+
+    from database.models import StreamRecording
+    for stream in streams:
+        rec_result = await session.execute(
+            select(StreamRecording).where(StreamRecording.stream_id == stream.id, StreamRecording.source == "twitch")
+        )
+        existing_rec = rec_result.scalar_one_or_none()
+        if existing_rec and existing_rec.url and existing_rec.url not in vod_urls:
+            await session.delete(existing_rec)
+            removed += 1
+
+    for stream in streams:
+        rec_result = await session.execute(
+            select(StreamRecording).where(StreamRecording.stream_id == stream.id, StreamRecording.source == "twitch")
+        )
+        existing_rec = rec_result.scalar_one_or_none()
+        if existing_rec:
+            continue
+        if not stream.started_at:
+            continue
+
+        stream_view = StreamForVodMatch(id=int(stream.id), date=stream.started_at, title=stream.title)
+        candidates = pick_vod_candidates(vods_by_date=vods_by_date, stream_date=stream.started_at.date())
+        for vod in candidates:
+            if is_match(stream_view, vod):
+                url = str(vod.get("url") or "").strip()
+                if url:
+                    session.add(StreamRecording(stream_id=stream.id, source="twitch", url=url))
+                    matched += 1
+                break
+
+    return (removed, matched)
 
 
 async def _enrich_games_meta(
@@ -137,7 +183,7 @@ async def _enrich_games_meta(
     HLTB_CACHE_TTL_DAYS = 30
     IGDB_CACHE_TTL_DAYS = 30
 
-    candidates = select_enrichment_candidates(session)
+    candidates = await select_igdb_enrichment_candidates(session)
     if only_game_ids is not None:
         ids = {int(i) for i in only_game_ids if int(i) > 0}
         candidates = [row for row in candidates if int(row.game_id) in ids]
@@ -152,42 +198,37 @@ async def _enrich_games_meta(
     igdb_calls = 0
     hltb_last_call_at = 0.0
 
+    from datetime import datetime, timezone
+
     for idx, row in enumerate(candidates, start=1):
         if idx == 1 or idx % 10 == 0 or idx == len(candidates):
             _log(f"Games meta enrichment progress: {idx}/{len(candidates)}")
-        patch: dict[str, Any] = {}
         key = _normalize_key(row.game_name)
         if not key:
             continue
 
-        # HLTB
-        hltb_hours: float | None = None
-        if (row.hltb_hours is None or float(row.hltb_hours or 0) <= 0) and key:
+        hltb_patch: dict[str, Any] = {}
+        if not row.has_hltb:
             hltb_entry = cache["hltb"].get(key)
             if _cache_fresh(hltb_entry, ttl_days=HLTB_CACHE_TTL_DAYS) and isinstance(
                 hltb_entry.get("hltb_hours"), (int, float)
             ):
-                hltb_hours = float(hltb_entry["hltb_hours"])
+                hltb_patch["hltb_all_styles"] = float(hltb_entry["hltb_hours"])
             else:
                 since_last = time.time() - hltb_last_call_at
                 if since_last < HLTB_DELAY_SECONDS:
                     await asyncio.sleep(HLTB_DELAY_SECONDS - since_last)
                 try:
                     result = await asyncio.wait_for(
-                        asyncio.to_thread(
-                            search_best,
-                            row.game_name,
-                            min_similarity=HLTB_MIN_SIMILARITY,
-                        ),
+                        asyncio.to_thread(search_best, row.game_name, min_similarity=HLTB_MIN_SIMILARITY),
                         timeout=HLTB_REQUEST_TIMEOUT_SECONDS,
                     )
                 except asyncio.TimeoutError:
                     result = None
                 hltb_last_call_at = time.time()
                 hltb_calls += 1
-
                 if result is not None:
-                    hltb_hours = float(result.hltb_hours)
+                    hltb_patch["hltb_all_styles"] = float(result.hltb_hours)
                     cache["hltb"][key] = {
                         "hltb_hours": float(result.hltb_hours),
                         "matched_name": result.matched_name,
@@ -197,68 +238,37 @@ async def _enrich_games_meta(
                 else:
                     cache["hltb"][key] = {"hltb_hours": None, "updated_at": _now_ts()}
 
-        # IGDB
-        igdb_view: IgdbMetaView | None = None
-        need_igdb = not bool((row.steam_url or "").strip()) or not bool((row.platforms_text or "").strip()) or not bool(
-            (row.genres_text or "").strip()
-        )
-        if need_igdb and key:
+        igdb_patch: dict[str, Any] = {}
+        if not row.has_igdb:
             igdb_entry = cache["igdb"].get(key)
             if _cache_fresh(igdb_entry, ttl_days=IGDB_CACHE_TTL_DAYS):
-                igdb_view = IgdbMetaView(
-                    steam_url=igdb_entry.get("steam_url"),
-                    platforms_text=igdb_entry.get("platforms_text"),
-                    genres_text=igdb_entry.get("genres_text"),
-                )
+                igdb_patch = {k: v for k, v in igdb_entry.items() if k != "updated_at" and v}
             else:
                 meta = await fetch_igdb_metadata(row.game_name)
                 igdb_calls += 1
                 if meta is not None:
-                    igdb_view = IgdbMetaView(
-                        steam_url=getattr(meta, "steam_url", None),
-                        platforms_text=getattr(meta, "platforms_text", None),
-                        genres_text=getattr(meta, "genres_text", None),
-                    )
+                    igdb_patch = {k: v for k, v in {
+                        "steam_url": getattr(meta, "steam_url", None),
+                        "description_ru": getattr(meta, "genres_text", None),
+                    }.items() if v}
                     cache["igdb"][key] = {
-                        "steam_url": igdb_view.steam_url,
-                        "platforms_text": igdb_view.platforms_text,
-                        "genres_text": igdb_view.genres_text,
+                        **igdb_patch,
                         "updated_at": _now_ts(),
                     }
                 else:
                     cache["igdb"][key] = {"updated_at": _now_ts()}
 
-        patch = build_patch(row, hltb_hours=hltb_hours, igdb=igdb_view)
-        if not patch:
-            continue
-        if apply_games_meta_patch(session, game_id=row.game_id, patch=patch):
-            updated_games += 1
-            updated_fields += len(patch)
+        if hltb_patch:
+            if await apply_hltb_patch(session, game_id=row.game_id, patch=hltb_patch):
+                updated_games += 1
+                updated_fields += len(hltb_patch)
+
+        if igdb_patch:
+            if await apply_igdb_patch(session, game_id=row.game_id, patch=igdb_patch):
+                updated_games += 1
+                updated_fields += len(igdb_patch)
 
     return (updated_games, updated_fields, hltb_calls, igdb_calls)
-
-
-def _enrich_streams_genres(session, *, only_stream_ids: set[int] | None = None) -> int:
-    updated = 0
-    if only_stream_ids is None:
-        streams = iter_streams_for_genres(session, force=False)
-    else:
-        ids = [int(i) for i in only_stream_ids if int(i) > 0]
-        if not ids:
-            return 0
-        streams = session.query(Stream).filter(Stream.id.in_(ids)).all()
-
-    for stream in streams:
-        has_participants, game_names, game_genres_texts = get_stream_context(stream)
-        new_value = compute_stream_genres(
-            title=stream.title,
-            has_participants=has_participants,
-            game_names=game_names,
-            game_genres_texts=game_genres_texts,
-        )
-        if set_stream_genres_text(session, stream, new_value):
-            updated += 1
-    return updated
 
 
 async def run() -> int:
@@ -282,83 +292,59 @@ async def run() -> int:
     games_data = load_games_json(games_json)
     _log(f"Loaded streams: {len(streams_data)}, games: {len(games_data)}")
 
-    session = SessionLocal()
-    try:
-        game_cache = {game.name: game for game in session.query(Game).all()}
+    async with AsyncSessionLocal() as session:
+        game_result = await session.execute(select(Game))
+        all_games = game_result.scalars().all()
+        game_cache = {game.name: game for game in all_games}
         known_game_ids = {int(game.id) for game in game_cache.values() if game.id is not None}
-        existing_stream_external_ids = {
-            str(ext_id)
-            for (ext_id,) in session.query(Stream.external_id).filter(Stream.external_id.isnot(None)).all()
-            if ext_id
-        }
+
+        eid_result = await session.execute(
+            select(Stream.external_id).where(Stream.external_id.isnot(None))
+        )
+        existing_stream_external_ids = {str(row[0]) for row in eid_result.all() if row[0]}
 
         _log("Syncing streams...")
-        stream_stats = sync_streams(
-            session,
-            streams_data,
-            game_cache,
-            prune_missing=True,
-            sync_participants_from_title=True,
+        stream_stats = await sync_streams(
+            session, streams_data, game_cache,
+            prune_missing=True, sync_participants_from_title=True,
         )
         _log("Syncing game stats...")
-        game_stats = sync_game_stats(session, games_data, game_cache, prune_missing=True)
+        game_stats = await sync_game_stats(session, games_data, game_cache, prune_missing=True)
         _log("Updating streams_count...")
-        streams_count_updated = update_streams_count(session)
+        streams_count_updated = await update_streams_count(session)
 
         current_game_ids = {int(game.id) for game in game_cache.values() if game.id is not None}
         added_game_ids = current_game_ids - known_game_ids
         incoming_stream_external_ids = {row.date.isoformat() for row in streams_data}
         added_stream_external_ids = incoming_stream_external_ids - existing_stream_external_ids
-        added_stream_ids = {
-            int(stream_id)
-            for (stream_id,) in session.query(Stream.id).filter(Stream.external_id.in_(list(added_stream_external_ids))).all()
-            if stream_id is not None
-        }
+
+        sid_result = await session.execute(
+            select(Stream.id).where(Stream.external_id.in_(list(added_stream_external_ids)))
+        )
+        added_stream_ids = {int(row[0]) for row in sid_result.all() if row[0] is not None}
+
         _log(f"New entities in this run -> games: {len(added_game_ids)}, streams: {len(added_stream_ids)}")
 
         _log("Syncing VOD URLs...")
         vod_removed, vod_matched = await _sync_vods(session, only_stream_ids=added_stream_ids)
-        _log("Enriching games meta (HLTB + IGDB)...")
+        _log("Enriching games metadata (HLTB + IGDB)...")
         games_updated, games_fields_updated, hltb_calls, igdb_calls = await _enrich_games_meta(
-            session,
-            cache=cache,
-            only_game_ids=added_game_ids,
+            session, cache=cache, only_game_ids=added_game_ids,
         )
-        _log("Computing stream genres...")
-        streams_genres_updated = _enrich_streams_genres(session, only_stream_ids=added_stream_ids)
 
         _log("Committing transaction...")
-        session.commit()
+        await session.commit()
         _save_cache(cache_path, cache)
 
         _log("JSON import to DB:")
-        _log(
-            f"Streams -> added: {stream_stats.added}, "
-            f"updated: {stream_stats.updated}, "
-            f"unchanged: {stream_stats.unchanged}, "
-            f"deleted: {stream_stats.deleted}"
-        )
-        _log(
-            f"Game stats -> added: {game_stats.added}, "
-            f"updated: {game_stats.updated}, "
-            f"unchanged: {game_stats.unchanged}, "
-            f"deleted: {game_stats.deleted}"
-        )
+        _log(f"Streams -> added: {stream_stats.added}, updated: {stream_stats.updated}, unchanged: {stream_stats.unchanged}, deleted: {stream_stats.deleted}")
+        _log(f"Game stats -> added: {game_stats.added}, updated: {game_stats.updated}, unchanged: {game_stats.unchanged}, deleted: {game_stats.deleted}")
         _log(f"GameStats.streams_count updated rows: {streams_count_updated}")
         _log("Post-import enrichment:")
         _log(f"VOD sync -> removed outdated: {vod_removed}, matched new: {vod_matched}")
-        _log(
-            f"Games meta -> updated games: {games_updated}, updated fields: {games_fields_updated}, "
-            f"hltb calls: {hltb_calls}, igdb calls: {igdb_calls}"
-        )
-        _log(f"Streams genres -> updated streams: {streams_genres_updated}")
+        _log(f"Games metadata -> updated games: {games_updated}, updated fields: {games_fields_updated}, hltb calls: {hltb_calls}, igdb calls: {igdb_calls}")
         _log("Done!")
         return 0
-    except Exception:
-        session.rollback()
-        raise
-    finally:
-        session.close()
 
 
 def main() -> None:
