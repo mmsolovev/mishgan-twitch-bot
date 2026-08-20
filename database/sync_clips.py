@@ -188,8 +188,11 @@ async def _fetch_games(http, headers, twitch_game_ids: set[str], *, client_id: s
 
 
 async def _get_or_create_user(session, *, twitch_user_id: str, login: str, display_name: str) -> User:
-    result = await session.execute(select(User).where(User.login == login))
+    result = await session.execute(select(User).where(User.twitch_user_id == twitch_user_id))
     user = result.scalar_one_or_none()
+    if user is None:
+        result = await session.execute(select(User).where(User.login == login))
+        user = result.scalar_one_or_none()
     if user is not None:
         if user.twitch_user_id is None:
             user.twitch_user_id = twitch_user_id
@@ -351,6 +354,7 @@ async def sync_clips():
 
         # --- Phase 3: write to DB ---
         inserted = 0
+        updated_clips = 0
         skipped_no_stream = 0
         skipped_duplicate = 0
 
@@ -360,10 +364,24 @@ async def sync_clips():
                 clip_dt = _parse_dt(clip["created_at"])
 
                 existing = await session.execute(
-                    select(Clip.id).where(Clip.external_id == external_id).limit(1)
+                    select(Clip).where(Clip.external_id == external_id).limit(1)
                 )
-                if existing.first():
-                    skipped_duplicate += 1
+                clip_record = existing.scalar_one_or_none()
+                if clip_record is not None:
+                    changed = False
+                    new_title = clip.get("title", "")
+                    new_views = clip.get("view_count", 0)
+                    if clip_record.title != new_title:
+                        clip_record.title = new_title
+                        changed = True
+                    if clip_record.views_count != new_views:
+                        clip_record.views_count = new_views
+                        changed = True
+                    if changed:
+                        session.add(clip_record)
+                        updated_clips += 1
+                    else:
+                        skipped_duplicate += 1
                     continue
 
                 stream_id = await _find_stream_for_clip(session, clip_dt)
@@ -412,8 +430,8 @@ async def sync_clips():
             await session.commit()
 
         log.info(
-            "Sync done: inserted=%d, skipped_duplicate=%d, skipped_no_stream=%d",
-            inserted, skipped_duplicate, skipped_no_stream,
+            "Sync done: inserted=%d, updated=%d, skipped_duplicate=%d, skipped_no_stream=%d",
+            inserted, updated_clips, skipped_duplicate, skipped_no_stream,
         )
 
         # --- Phase 4: backfill missing game_ids from previous runs ---

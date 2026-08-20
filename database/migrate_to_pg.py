@@ -1,8 +1,13 @@
 """
 One-time migration script: SQLite (storage/streams.db) → PostgreSQL.
 
+Safe to re-run: only inserts new records (ON CONFLICT DO NOTHING).
+stream_recordings are synced (extras deleted, missing added).
+Genres, platforms, game_metadata_hltb are NOT migrated.
+
 Usage:
     python database/migrate_to_pg.py
+    python database/migrate_to_pg.py --reset   # truncate all data first
 
 Requirements:
     - SQLite file storage/streams.db with data
@@ -143,10 +148,15 @@ async def migrate_games(sqlite_conn, pg_session):
             slug_counter[slug] = 0
         result = await pg_session.execute(
             text("""
-                INSERT INTO games (name, slug, created_at, updated_at)
-                VALUES (:name, :slug, :now, :now)
-                ON CONFLICT (name) DO UPDATE SET slug = EXCLUDED.slug
-                RETURNING id
+                WITH ins AS (
+                    INSERT INTO games (name, slug, created_at, updated_at)
+                    VALUES (:name, :slug, :now, :now)
+                    ON CONFLICT (name) DO NOTHING
+                    RETURNING id
+                )
+                SELECT id FROM ins
+                UNION ALL
+                SELECT id FROM games WHERE name = :name AND NOT EXISTS (SELECT 1 FROM ins)
             """),
             {"name": row["name"], "slug": slug, "now": utcnow()},
         )
@@ -175,10 +185,15 @@ async def migrate_users(sqlite_conn, pg_session):
     for row in rows:
         result = await pg_session.execute(
             text("""
-                INSERT INTO users (login, display_name, twitch_url, is_streamer, created_at)
-                VALUES (:login, :display_name, :twitch_url, true, :now)
-                ON CONFLICT (login) DO UPDATE SET display_name = EXCLUDED.display_name
-                RETURNING id
+                WITH ins AS (
+                    INSERT INTO users (login, display_name, twitch_url, is_streamer, created_at)
+                    VALUES (:login, :display_name, :twitch_url, true, :now)
+                    ON CONFLICT (login) DO NOTHING
+                    RETURNING id
+                )
+                SELECT id FROM ins
+                UNION ALL
+                SELECT id FROM users WHERE login = :login AND NOT EXISTS (SELECT 1 FROM ins)
             """),
             {
                 "login": row["name"],
@@ -230,23 +245,30 @@ async def migrate_streamers_on_stream(sqlite_conn, pg_session, user_id_mapping, 
 
 
 async def migrate_streams(sqlite_conn, pg_session):
-    """Migrate streams + vod_url → stream_recordings (source='twitch')."""
+    """Migrate streams. Returns (id_mapping, desired_recordings).
+
+    desired_recordings: list of (new_stream_id, url) from old DB for sync.
+    """
     rows = sqlite_conn.execute("SELECT * FROM streams ORDER BY id").fetchall()
     id_mapping = {}  # old_id → new_id
+    desired_recordings = []  # (new_stream_id, url)
 
     for row in rows:
         duration_min = int(row["duration"] * 60) if row["duration"] else None
 
         result = await pg_session.execute(
             text("""
-                INSERT INTO streams (external_id, title, started_at, duration_minutes,
-                                     avg_viewers, max_viewers, followers_gained, views_gained, created_at)
-                VALUES (:external_id, :title, :started_at, :duration_minutes,
-                        :avg_viewers, :max_viewers, :followers, :views, :now)
-                ON CONFLICT (external_id) DO UPDATE SET
-                    title = EXCLUDED.title,
-                    started_at = EXCLUDED.started_at
-                RETURNING id
+                WITH ins AS (
+                    INSERT INTO streams (external_id, title, started_at, duration_minutes,
+                                         avg_viewers, max_viewers, followers_gained, views_gained, created_at)
+                    VALUES (:external_id, :title, :started_at, :duration_minutes,
+                            :avg_viewers, :max_viewers, :followers, :views, :now)
+                    ON CONFLICT (external_id) DO NOTHING
+                    RETURNING id
+                )
+                SELECT id FROM ins
+                UNION ALL
+                SELECT id FROM streams WHERE external_id = :external_id AND NOT EXISTS (SELECT 1 FROM ins)
             """),
             {
                 "external_id": row["external_id"],
@@ -263,17 +285,40 @@ async def migrate_streams(sqlite_conn, pg_session):
         stream_id = result.scalar_one()
         id_mapping[row["id"]] = stream_id
 
-        # vod_url → stream_recordings
         if row["vod_url"]:
+            desired_recordings.append((stream_id, row["vod_url"]))
+
+    return id_mapping, desired_recordings
+
+
+async def sync_stream_recordings(pg_session, desired_recordings):
+    """Sync stream_recordings with old DB: delete extras, add missing."""
+    existing = await pg_session.execute(text(
+        "SELECT id, stream_id, url FROM stream_recordings WHERE source = 'twitch'"
+    ))
+    existing_rows = {(r.stream_id, r.url): r.id for r in existing}
+
+    desired = {(sid, url) for sid, url in desired_recordings}
+
+    # Delete recordings not in old DB
+    to_delete = [rid for (sid, url), rid in existing_rows.items() if (sid, url) not in desired]
+    if to_delete:
+        await pg_session.execute(
+            text("DELETE FROM stream_recordings WHERE id = ANY(:ids)"),
+            {"ids": to_delete},
+        )
+
+    # Add missing recordings
+    now = utcnow()
+    for stream_id, url in desired_recordings:
+        if (stream_id, url) not in existing_rows:
             await pg_session.execute(
                 text("""
                     INSERT INTO stream_recordings (stream_id, source, url, created_at)
                     VALUES (:stream_id, 'twitch', :url, :now)
                 """),
-                {"stream_id": stream_id, "url": row["vod_url"], "now": utcnow()},
+                {"stream_id": stream_id, "url": url, "now": now},
             )
-
-    return id_mapping
 
 
 async def migrate_stream_games(sqlite_conn, pg_session, stream_id_mapping, game_id_mapping):
@@ -311,14 +356,7 @@ async def migrate_game_stats(sqlite_conn, pg_session, game_id_mapping):
                                         followers_per_hour, streams_count, last_stream, synced_at)
                 VALUES (:game_id, :streamed_hours, :avg_viewers, :max_viewers,
                         :followers_per_hour, :streams_count, :last_stream, :now)
-                ON CONFLICT (game_id) DO UPDATE SET
-                    streamed_hours = EXCLUDED.streamed_hours,
-                    avg_viewers = EXCLUDED.avg_viewers,
-                    max_viewers = EXCLUDED.max_viewers,
-                    followers_per_hour = EXCLUDED.followers_per_hour,
-                    streams_count = EXCLUDED.streams_count,
-                    last_stream = EXCLUDED.last_stream,
-                    synced_at = EXCLUDED.synced_at
+                ON CONFLICT (game_id) DO NOTHING
             """),
             {
                 "game_id": new_game_id,
@@ -334,7 +372,7 @@ async def migrate_game_stats(sqlite_conn, pg_session, game_id_mapping):
 
 
 async def migrate_game_metadata(sqlite_conn, pg_session, game_id_mapping):
-    """Migrate games_meta → game_metadata_hltb + game_metadata_igdb + game_genres + game_platforms."""
+    """Migrate games_meta → game_metadata_igdb only (skip HLTB, genres, platforms)."""
     rows = sqlite_conn.execute("SELECT * FROM games_meta").fetchall()
 
     for row in rows:
@@ -342,75 +380,16 @@ async def migrate_game_metadata(sqlite_conn, pg_session, game_id_mapping):
         if new_game_id is None:
             continue
 
-        # HLTB
-        if row["hltb_hours"] is not None:
-            await pg_session.execute(
-                text("""
-                    INSERT INTO game_metadata_hltb (game_id, hltb_main_story, synced_at)
-                    VALUES (:game_id, :hours, :now)
-                    ON CONFLICT (game_id) DO UPDATE SET hltb_main_story = EXCLUDED.hltb_main_story
-                """),
-                {"game_id": new_game_id, "hours": row["hltb_hours"], "now": utcnow()},
-            )
-
         # IGDB (steam_url only)
         if row["steam_url"] is not None:
             await pg_session.execute(
                 text("""
                     INSERT INTO game_metadata_igdb (game_id, igdb_id, steam_url, synced_at)
                     VALUES (:game_id, :igdb_id, :steam_url, :now)
-                    ON CONFLICT (game_id) DO UPDATE SET steam_url = EXCLUDED.steam_url
+                    ON CONFLICT (game_id) DO NOTHING
                 """),
                 {"game_id": new_game_id, "igdb_id": f"pending-{new_game_id}", "steam_url": row["steam_url"], "now": utcnow()},
             )
-
-        # Platforms
-        if row["platforms_text"]:
-            names = [p.strip() for p in row["platforms_text"].split(",") if p.strip()]
-            for name in names:
-                slug = name.lower().replace(" ", "-")
-                result = await pg_session.execute(
-                    text("""
-                        INSERT INTO platforms (name, slug, created_at)
-                        VALUES (:name, :slug, :now)
-                        ON CONFLICT (name) DO UPDATE SET slug = EXCLUDED.slug
-                        RETURNING id
-                    """),
-                    {"name": name, "slug": slug, "now": utcnow()},
-                )
-                platform_id = result.scalar_one()
-                await pg_session.execute(
-                    text("""
-                        INSERT INTO game_platforms (game_id, platform_id)
-                        VALUES (:game_id, :platform_id)
-                        ON CONFLICT DO NOTHING
-                    """),
-                    {"game_id": new_game_id, "platform_id": platform_id},
-                )
-
-        # Genres
-        if row["genres_text"]:
-            names = [g.strip() for g in row["genres_text"].split(",") if g.strip()]
-            for name in names:
-                slug = name.lower().replace(" ", "-")
-                result = await pg_session.execute(
-                    text("""
-                        INSERT INTO genres (name, slug, created_at)
-                        VALUES (:name, :slug, :now)
-                        ON CONFLICT (name) DO UPDATE SET slug = EXCLUDED.slug
-                        RETURNING id
-                    """),
-                    {"name": name, "slug": slug, "now": utcnow()},
-                )
-                genre_id = result.scalar_one()
-                await pg_session.execute(
-                    text("""
-                        INSERT INTO game_genres (game_id, genre_id)
-                        VALUES (:game_id, :genre_id)
-                        ON CONFLICT DO NOTHING
-                    """),
-                    {"game_id": new_game_id, "genre_id": genre_id},
-                )
 
 
 async def migrate_streamer_games(sqlite_conn, pg_session, game_id_mapping):
@@ -456,11 +435,7 @@ async def migrate_streamer_games(sqlite_conn, pg_session, game_id_mapping):
             text("""
                 INSERT INTO streamer_games (streamer_id, game_id, interested, liked, completed, updated_at)
                 VALUES (:streamer_id, :game_id, :interested, :liked, :completed, :now)
-                ON CONFLICT (streamer_id, game_id) DO UPDATE SET
-                    interested = EXCLUDED.interested,
-                    liked = EXCLUDED.liked,
-                    completed = EXCLUDED.completed,
-                    updated_at = EXCLUDED.updated_at
+                ON CONFLICT (streamer_id, game_id) DO NOTHING
             """),
             {
                 "streamer_id": streamer_id,
@@ -529,13 +504,7 @@ async def migrate_recommended_games_to_games(sqlite_conn, pg_session, game_id_ma
                          igdb_score, cover_url, raw_payload, synced_at)
                     VALUES (:game_id, :igdb_id, :steam_url, :release_date, :description_ru,
                             :igdb_score, :cover_url, :raw_payload, :now)
-                    ON CONFLICT (game_id) DO UPDATE SET
-                        steam_url = COALESCE(EXCLUDED.steam_url, game_metadata_igdb.steam_url),
-                        release_date = COALESCE(EXCLUDED.release_date, game_metadata_igdb.release_date),
-                        description_ru = COALESCE(EXCLUDED.description_ru, game_metadata_igdb.description_ru),
-                        igdb_score = COALESCE(EXCLUDED.igdb_score, game_metadata_igdb.igdb_score),
-                        cover_url = COALESCE(EXCLUDED.cover_url, game_metadata_igdb.cover_url),
-                        raw_payload = COALESCE(EXCLUDED.raw_payload, game_metadata_igdb.raw_payload)
+                    ON CONFLICT (game_id) DO NOTHING
                 """),
                 {"game_id": pg_game_id, "igdb_id": igdb_id,
                  "steam_url": rec["steam_url"], "release_date": release_dt,
@@ -559,10 +528,15 @@ async def migrate_recommended_games_to_games(sqlite_conn, pg_session, game_id_ma
 
         result = await pg_session.execute(
             text("""
-                INSERT INTO games (name, slug, created_at, updated_at)
-                VALUES (:name, :slug, :now, :now)
-                ON CONFLICT (name) DO UPDATE SET slug = EXCLUDED.slug
-                RETURNING id
+                WITH ins AS (
+                    INSERT INTO games (name, slug, created_at, updated_at)
+                    VALUES (:name, :slug, :now, :now)
+                    ON CONFLICT (name) DO NOTHING
+                    RETURNING id
+                )
+                SELECT id FROM ins
+                UNION ALL
+                SELECT id FROM games WHERE name = :name AND NOT EXISTS (SELECT 1 FROM ins)
             """),
             {"name": rec["title"], "slug": slug, "now": utcnow()},
         )
@@ -588,13 +562,7 @@ async def migrate_recommended_games_to_games(sqlite_conn, pg_session, game_id_ma
                          igdb_score, cover_url, raw_payload, synced_at)
                     VALUES (:game_id, :igdb_id, :steam_url, :release_date, :description_ru,
                             :igdb_score, :cover_url, :raw_payload, :now)
-                    ON CONFLICT (game_id) DO UPDATE SET
-                        steam_url = COALESCE(EXCLUDED.steam_url, game_metadata_igdb.steam_url),
-                        release_date = COALESCE(EXCLUDED.release_date, game_metadata_igdb.release_date),
-                        description_ru = COALESCE(EXCLUDED.description_ru, game_metadata_igdb.description_ru),
-                        igdb_score = COALESCE(EXCLUDED.igdb_score, game_metadata_igdb.igdb_score),
-                        cover_url = COALESCE(EXCLUDED.cover_url, game_metadata_igdb.cover_url),
-                        raw_payload = COALESCE(EXCLUDED.raw_payload, game_metadata_igdb.raw_payload)
+                    ON CONFLICT (game_id) DO NOTHING
                 """),
                 {"game_id": pg_game_id, "igdb_id": igdb_id,
                  "steam_url": rec["steam_url"], "release_date": release_dt,
@@ -638,7 +606,7 @@ async def migrate_game_recommendations(sqlite_conn, pg_session, rec_to_game):
         if vote["user_login"] == "tabula":
             note = "В списке желаемого Steam"
         elif vote["user_login"] == "igdb":
-            note = "Игра популярна"
+            note = "Ожидаемая новинка"
 
         await pg_session.execute(
             text("""
@@ -687,42 +655,39 @@ async def migrate():
         if reset:
             print("\n[RESET] Truncating all data tables...")
             await reset_data(pg)
-        print("\n[1/10] Migrating platforms...")
-        await migrate_platforms(sqlite_conn, pg)
-
-        print("[2/10] Migrating genres...")
-        await migrate_genres(sqlite_conn, pg)
-
-        print("[3/10] Migrating games + aliases...")
+        print("\n[1/11] Migrating games + aliases...")
         game_id_mapping = await migrate_games(sqlite_conn, pg)
 
-        print("[4/10] Migrating users (participants + vote users)...")
+        print("[2/11] Migrating users (participants + vote users)...")
         user_id_mapping = await migrate_users(sqlite_conn, pg)
 
-        print("[5/10] Migrating streams + stream_recordings...")
-        stream_id_mapping = await migrate_streams(sqlite_conn, pg)
+        print("[3/11] Migrating streams...")
+        stream_id_mapping, desired_recordings = await migrate_streams(sqlite_conn, pg)
 
-        print("[6/10] Migrating streamers_on_stream...")
+        print("[4/11] Syncing stream_recordings with old DB...")
+        await sync_stream_recordings(pg, desired_recordings)
+
+        print("[5/11] Migrating streamers_on_stream...")
         await migrate_streamers_on_stream(sqlite_conn, pg, user_id_mapping, stream_id_mapping)
 
-        print("[7/10] Migrating stream_games...")
+        print("[6/11] Migrating stream_games...")
         await migrate_stream_games(sqlite_conn, pg, stream_id_mapping, game_id_mapping)
 
-        print("[8/10] Migrating game_stats...")
+        print("[7/11] Migrating game_stats...")
         await migrate_game_stats(sqlite_conn, pg, game_id_mapping)
 
-        print("[9/10] Migrating game_metadata (HLTB, IGDB, genres, platforms)...")
+        print("[8/11] Migrating game_metadata (IGDB only)...")
         await migrate_game_metadata(sqlite_conn, pg, game_id_mapping)
 
-        print("[10/12] Migrating recommended_games -> games...")
+        print("[9/11] Migrating recommended_games -> games...")
         rec_to_game = await migrate_recommended_games_to_games(sqlite_conn, pg, game_id_mapping)
         print(f"  -> {len(rec_to_game)} recommended_games mapped to games")
 
-        print("[11/12] Migrating game_recommendations...")
+        print("[10/11] Migrating game_recommendations...")
         rec_count = await migrate_game_recommendations(sqlite_conn, pg, rec_to_game)
         print(f"  -> {rec_count} game_recommendations records")
 
-        print("[12/12] Migrating streamer_games (liked/completed + interested)...")
+        print("[11/11] Migrating streamer_games (liked/completed + interested)...")
         sg_count = await migrate_streamer_games(sqlite_conn, pg, game_id_mapping)
         print(f"  -> {sg_count} streamer_games records")
 
