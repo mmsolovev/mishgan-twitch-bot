@@ -22,11 +22,11 @@
    │  │  ┌──────────┐  ┌──────────┐  ┌────────┐  ┌──────────┐  │        │
    │  │  │  INGEST   │  │ TRANSFORM│  │  LOAD   │  │ DELIVERY │  │        │
    │  │  │ (сбор)    │─►│ (чистка, │─►│ (запись │─►│ (выгрузка)│  │        │
-   │  │  │           │  │ обогащ.) │  │ в SQLite)│  │          │  │        │
+   │  │  │           │  │ обогащ.) │  │ в PG)   │  │          │  │        │
    │  │  └──────────┘  └──────────┘  └────────┘  └──────────┘  │        │
    │  │       ▲                            │                      │        │
    │  │       │   ┌────────────────────────┘                      │        │
-   │  │       │   │  SQLite (storage/streams.db)                  │        │
+   │  │       │   │  PostgreSQL                                    │        │
    │  │       └───┴───────────────────────────────────────────────┘        │
    │  └──────────────────────────────────────────────────────────┘        │
    │                                                                       │
@@ -80,14 +80,14 @@ pipeline/
 │   ├── sheets_transform.py          #   Нормализация для Google Sheets (padding/bool)
 │   └── recommendations_transform.py #   Статусы рекомендаций (upcoming/released/streamed)
 │
-├── load/                            # Загрузка — пишет в SQLite (через SQLAlchemy)
-│   ├── load_streams.py              #   Stream upsert, VOD sync, genres_text
-│   ├── load_participants.py         #   Participant get_or_create, парсинг @username
+├── load/                            # Загрузка — пишет в PostgreSQL (через SQLAlchemy async)
+│   ├── load_streams.py              #   Stream upsert, VOD sync, started_at/ended_at
+│   ├── load_participants.py         #   User get_or_create, streamers_on_stream M2M
 │   ├── load_stream_games.py         #   StreamGame association (порядок игр в стриме)
-│   ├── load_games.py                #   Game get_or_create
-│   ├── load_game_meta.py            #   GameMeta: обогащение (HLTB, IGDB) + ручные поля
+│   ├── load_games.py                #   Game get_or_create + GameAlias
+│   ├── load_game_meta.py            #   GameMetadataIGDB / GameMetadataHLTB: обогащение
 │   ├── load_game_stats.py           #   GameStats upsert (из TwitchTracker)
-│   └── load_recommendations.py      #   RecommendedGame CRUD + lifecycle (статусы)
+│   └── load_recommendations.py      #   game_recommendations CRUD + streamer_games
 │
 ├── delivery/                        # Доставка — выгружает данные вовне
 │   ├── sheets_utils.py              #   Shared: upload_table, get_or_create_worksheet
@@ -102,10 +102,10 @@ pipeline/
 └── orchestrator/                    # Оркестрация — CLI-сборки слоёв в рабочие скрипты
     ├── parse_streams_json.py        #   HTML → JSON (Ingest → Delivery)
     ├── parse_games_json.py          #   HTML(несколько) → merge → JSON
-    ├── import_json_to_db.py         #   JSON → SQLite + VOD sync + HLTB/IGDB enrich + genres
-    ├── import_igdb_releases.py      #   IGDB API → SQLite (новые релизы)
-    ├── sync_sheets.py               #   SQLite → Google Sheets (все листы)
-    └── enrich_descriptions_with_gpt.py # SQLite → GPT → SQLite (описания на русском)
+    ├── import_json_to_db.py         #   JSON → PostgreSQL + VOD sync + HLTB/IGDB enrich
+    ├── import_igdb_releases.py      #   IGDB API → PostgreSQL (новые релизы)
+    ├── sync_sheets.py               #   PostgreSQL → Google Sheets (все листы)
+    └── enrich_descriptions_with_gpt.py # PostgreSQL → GPT → PostgreSQL (описания на русском)
 ```
 
 ### Data Flow Pipeline
@@ -114,7 +114,7 @@ pipeline/
 TwitchTracker HTML ──► parse_stream_json ──► storage/streams.json ──┐
                        parse_games_json  ──► storage/games.json  ───┤
                                                                      │
-IGDB API ──► import_igdb_releases ──► SQLite (recommended_games)     │
+IGDB API ──► import_igdb_releases ──► PostgreSQL (game_recommendations) │
                                                                      │
                           ┌──────────────────────────────────────────┘
                           ▼
@@ -127,7 +127,7 @@ IGDB API ──► import_igdb_releases ──► SQLite (recommended_games)    
               └── compute_stream_genres()  ← по заголовкам
                           │
                           ▼
-                   SQLite (streams.db)
+                   PostgreSQL
                           │
               ┌───────────┴───────────┐
               ▼                       ▼
@@ -174,52 +174,117 @@ runtime/                           # Сбор live-метрик стрима
 
 ---
 
-## 4. База данных (SQLite)
+## 4. База данных (PostgreSQL)
+
+Стек: `SQLAlchemy 2.0` (async) + `asyncpg` + `Alembic` для миграций.
+
+### Основные домены
 
 ```
-┌───────────────────────────────────────────────────────────────────┐
-│                                                                   │
-│  games                   streams              participants        │
-│  ┌──────────────┐       ┌──────────────┐     ┌──────────────┐    │
-│  │ id (PK)      │       │ id (PK)      │     │ id (PK)      │    │
-│  │ name (UQ,IX) │◄──┐   │ external_id  │     │ name (UQ,IX) │    │
-│  └──────┬───────┘   │   │ date (IX)    │     │ display_name │    │
-│         │           │   │ duration     │     │ twitch_url   │    │
-│         │           │   │ avg_viewers  │     └──────┬───────┘    │
-│         │           │   │ max_viewers  │            │            │
-│  games_meta         │   │ followers    │     stream_participants │
-│  ┌──────────────┐   │   │ views        │     ┌──────────────┐    │
-│  │ game_id (PK) │   │   │ title        │     │ stream_id    │────┼──┐
-│  │ liked        │   │   │ vod_url      │     │ participant_id│   │  │
-│  │ completed    │   │   │ genres_text  │     └──────────────┘   │  │
-│  │ hltb_hours   │   │   └──────┬───────┘                        │  │
-│  │ steam_url    │   │          │                                │  │
-│  │ platforms_txt│   │  stream_games (порядок игр в стриме)      │  │
-│  │ genres_text  │   │  ┌──────────────┐                         │  │
-│  └──────────────┘   └──┤ stream_id    │                         │  │
-│                        │ game_id      │◄────────────────────────┘  │
-│  games_stats           │ position     │                            │
-│  ┌──────────────┐      └──────────────┘                            │
-│  │ game_id (PK) │                                                 │
-│  │ period (PK)  │     recommended_games                            │
-│  │ hours_streamd│     ┌──────────────────┐                        │
-│  │ streams_count│     │ id (PK)          │                        │
-│  │ last_stream  │     │ normalized_name  │◄─── matched_game_id ───┘
-│  └──────────────┘     │ title            │                        │
-│                       │ status (IX)      │── "upcoming"/"released" │
-│  recommended_game_votes│ release_date    │                        │
-│  ┌──────────────────┐ │ description_short│◄── GPT-generated       │
-│  │ id (PK)          │ │ steam_url        │                        │
-│  │ recommended_game │ │ rating_text      │                        │
-│  │ user_login       │ │ cover_url        │                        │
-│  │ created_at       │ │ source_name      │── "igdb"/"chat"       │
-│  └──────────────────┘ │ streamer_interested│                      │
-│                 ┌─────┤ created_at       │                        │
-│                 │     │ updated_at       │                        │
-│                 │     └──────────────────┘                        │
-│                 │               │                                 │
-│                 └───────────────┘                                 │
-└───────────────────────────────────────────────────────────────────┘
+CORE DOMAIN
+───────────────────────────────────────────────────────────────────────
+games                  streams                 users
+┌──────────────┐      ┌──────────────┐        ┌──────────────┐
+│ id (PK)      │      │ id (PK)      │        │ id (PK)      │
+│ name (UQ)    │      │ external_id  │        │ twitch_user_id│
+│ slug (UQ)    │      │ started_at   │        │ login (UQ)   │
+│ game_type    │      │ ended_at     │        │ display_name │
+│ parent_game_id│     │ duration_min │        │ is_streamer  │
+│ franchise_id │      │ avg_viewers  │        │ is_admin     │
+│ created_at   │      │ max_viewers  │        │ is_trusted   │
+│ updated_at   │      │ followers_   │        │ duels_*      │
+└──────┬───────┘      │  gained      │        │ last_seen_at │
+       │              │ views_gained │        └──────┬───────┘
+       │              │ title        │               │
+       │              │ created_at   │        streamers_on_stream
+       │              │ updated_at   │        ┌──────────────┐
+       │              └──────┬───────┘        │ stream_id    │
+       │                     │                │ streamer_id  │
+       │              stream_games            │ role         │
+       │              ┌──────────────┐        └──────────────┘
+       │              │ id (PK)      │
+       ├──aliases────►│ stream_id    │
+       │              │ game_id      │        streamer_games
+       │              │ position     │        ┌──────────────┐
+       │              │ started_at   │        │ streamer_id  │
+       │              │ ended_at     │        │ game_id      │
+       │              │ duration_min │        │ interested   │
+       │              │ avg_viewers  │        │ liked        │
+       │              │ peak_viewers │        │ completed    │
+       │              └──────────────┘        └──────────────┘
+       │
+       ├──game_genres──► genres (id, name, slug)
+       │
+       └──game_platforms──► platforms (id, name, slug)
+
+EXTERNAL METADATA                RELATIONS
+───────────────────────────────────────────────────────────────────────
+game_metadata_igdb               stream_recordings
+┌──────────────┐                 ┌──────────────┐
+│ game_id (PK) │                 │ id (PK)      │
+│ igdb_id (UQ) │                 │ stream_id    │
+│ release_date │                 │ source       │
+│ steam_url    │                 │ url          │
+│ igdb_score   │                 │ duration_min │
+│ description_ │                 │ recorded_at  │
+│  en/ru       │                 └──────────────┘
+│ cover_url    │
+│ raw_payload  │                 game_recommendations
+│ synced_at    │                 ┌──────────────┐
+└──────────────┘                 │ user_id (PK) │
+                                 │ game_id (PK) │
+game_metadata_hltb               │ note         │
+┌──────────────┐                 │ created_at   │
+│ game_id (PK) │                 └──────────────┘
+│ hltb_* hours │
+│ review_count │                 game_aliases
+│ synced_at    │                 ┌──────────────┐
+└──────────────┘                 │ id (PK)      │
+                                 │ game_id      │
+game_stats                       │ alias        │
+┌──────────────┐                 │ normalized_  │
+│ game_id (PK) │                 │  alias (UQ)  │
+│ streamed_hrs │                 │ is_primary   │
+│ avg/max_view │                 │ source       │
+│ streams_count│                 └──────────────┘
+│ last_stream  │
+│ synced_at    │
+└──────────────┘
+```
+
+### Полный список таблиц (40+)
+
+| Домен | Таблицы |
+|-------|---------|
+| Core | `games`, `streams`, `users`, `games_franchises`, `duels` |
+| Duels | `duels_franchises`, `duels_characters`, `duels_character_versions`, `duels_abilities`, `duels_version_abilities`, `duels_scenarios`, `duels_scenario_usage` |
+| Relations | `stream_games`, `stream_recordings`, `streamers_on_stream`, `streamer_games`, `game_recommendations`, `game_genres`, `game_platforms` |
+| External metadata | `game_metadata_igdb`, `game_metadata_hltb`, `game_stats`, `game_aliases` |
+| Supporting | `genres`, `platforms` |
+| Clips | `clips`, `clip_tags` |
+| Calendar | `calendar_days`, `holidays`, `famous_persons` |
+| Bot | `bot_commands`, `bot_command_aliases`, `command_usage_logs` |
+| Chat | `chat_messages`, `vip_history` |
+| Auth | `twitch_authorizations`, `web_sessions` |
+| Rewards | `twitch_rewards`, `twitch_reward_redemptions` |
+| Analytics | `stream_runtime_samples`, `stream_runtime_buckets` |
+
+### Миграции
+
+Схема управляется через `Alembic`. Текущие миграции в `alembic/versions/`:
+- `0001_initial_schema` — полная начальная схема
+- `0002_add_genre_platform_abbreviation` — аббревиатуры жанров/платформ
+- `0003_update_hltb_metadata` — расширенные поля HLTB
+
+```bash
+# Применить все миграции
+alembic upgrade head
+
+# Создать новую миграцию
+alembic revision --autogenerate -m "description"
+
+# Откатить одну миграцию
+alembic downgrade -1
 ```
 
 ---
@@ -277,9 +342,8 @@ runtime.Collector
 
 ```
 Проблема                              Где                    План
-──────────────────────────────────────────────────────────────────────────
+─────────────────────────────────────────────────────────────────────────
 Циркулярные зависимости               pipeline ↔ services    Выделить shared/core
-Нет абстракции БД (Repository)        Прямой SQLAlchemy      Репозитории в shared/
 Конфиг — плоские глобальные переменные config/settings.py    pydantic-settings
 Нет тестов                            Весь проект            После выделения shared/
 Нет API для веба/телеграма            Нет                    FastAPI отдельным приложением
