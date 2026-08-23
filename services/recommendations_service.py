@@ -71,7 +71,7 @@ def _normalize_user_login(value: str) -> str:
 
 def _doc_suffix() -> str:
     if GAMES_SHEET_URL:
-        return f" | Все в листах РЕЛИЗЫ и СОВЕТЫ тут: {GAMES_SHEET_URL}"
+        return f" | Все в листах РЕЛИЗЫ и СОВЕТЫ: {GAMES_SHEET_URL}"
     return ""
 
 
