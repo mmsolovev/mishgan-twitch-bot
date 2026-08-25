@@ -1,5 +1,6 @@
 import asyncio
 import re
+import os
 
 from g4f import ChatCompletion
 
@@ -19,8 +20,15 @@ MAX_RETRIES = len(GPT_MODELS)
 # At least one Cyrillic letter is required to consider the result Russian.
 _RE_CYRILLIC = re.compile(r"[а-яА-ЯёЁ]")
 
+# Toggle: set to "openrouter" to use OpenRouter, "g4f" for legacy fallback
+USE_OPENROUTER = os.getenv("GPT_BACKEND", "openrouter") == "openrouter"
+
 
 async def ask_gpt(prompt: str) -> str:
+    if USE_OPENROUTER:
+        from services.openrouter_service import ask_openrouter
+        return await ask_openrouter(prompt)
+
     loop = asyncio.get_running_loop()
 
     def sync_request():
@@ -81,6 +89,15 @@ def _is_likely_russian(text: str) -> bool:
 
 
 async def generate_short_description(text: str) -> str | None:
+    """Generate short Russian game description from English IGDB summary.
+
+    Uses OpenRouter by default (set GPT_BACKEND=g4f for legacy g4f fallback).
+    """
+    if USE_OPENROUTER:
+        from services.openrouter_service import generate_short_description as _or_generate
+        return await _or_generate(text)
+
+    # Legacy g4f fallback
     system_prompt = (
         "Ты — опытный копирайтер, специализирующийся на кратких и интересных описаниях игр для русскоязычной аудитории. "
         "Твоя задача — пересказать англоязычное описание игры на русском языке, сохранив ключевые особенности и жанр. "
@@ -114,6 +131,17 @@ async def generate_short_description(text: str) -> str | None:
             continue
 
         shortened = raw[:170]
+
+        if len(raw) > 170:
+            logger.warning(
+                "Description too long (%d chars), skipping (model=%s)",
+                len(raw), model,
+            )
+            if attempt < MAX_RETRIES:
+                wait = 2 ** attempt
+                logger.warning("Retrying with next model in %ds...", wait)
+                await asyncio.sleep(wait)
+            continue
 
         if not _is_likely_russian(shortened):
             logger.warning(

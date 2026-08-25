@@ -62,6 +62,21 @@ class Stream(Base):
     stream_games = relationship("StreamGame", back_populates="stream", cascade="all, delete-orphan")
     stream_recordings = relationship("StreamRecording", back_populates="stream", cascade="all, delete-orphan")
     streamers_on_stream = relationship("User", secondary="streamers_on_stream", backref="streams_on")
+    titles = relationship("StreamTitle", back_populates="stream", cascade="all, delete-orphan",
+                          order_by="StreamTitle.started_at")
+
+
+class StreamTitle(Base):
+    __tablename__ = "stream_titles"
+
+    id = Column(BigInteger, primary_key=True)
+    stream_id = Column(Integer, ForeignKey("streams.id"), nullable=False, index=True)
+    title = Column(Text, nullable=False)
+    started_at = Column(DateTime, nullable=False)
+    is_initial = Column(Boolean, default=False)
+    created_at = Column(DateTime)
+
+    stream = relationship("Stream", back_populates="titles")
 
 
 class User(Base):

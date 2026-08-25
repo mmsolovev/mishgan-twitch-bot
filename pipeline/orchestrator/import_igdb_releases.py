@@ -45,7 +45,7 @@ async def _run():
                 release_date=meta.release_date,
                 steam_url=meta.steam_url,
                 igdb_score=_parse_igdb_score(meta.rating_text),
-                description_ru=meta.description_short,
+                description_en=meta.description_short,
                 cover_url=meta.cover_url,
                 raw_payload=meta.source_payload,
             )

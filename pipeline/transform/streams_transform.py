@@ -88,6 +88,12 @@ def build_vods_index(vods: list[dict[str, Any]]) -> dict[date, list[dict[str, An
     return dict(vods_by_date)
 
 
+def extract_stream_id_from_vod(vod: dict[str, Any]) -> str | None:
+    """Extract Twitch stream_id from a VOD dict. Returns None if empty."""
+    sid = str(vod.get("stream_id") or "").strip()
+    return sid if sid and sid != "0" else None
+
+
 def is_match(stream: StreamForVodMatch, vod: dict[str, Any]) -> bool:
     vod_start = _parse_vod_created_at(vod.get("created_at"))
 
@@ -125,6 +131,7 @@ __all__ = [
     "StreamForVodMatch",
     "build_vods_index",
     "compute_stream_genres",
+    "extract_stream_id_from_vod",
     "is_match",
     "normalize_key",
     "pick_vod_candidates",
