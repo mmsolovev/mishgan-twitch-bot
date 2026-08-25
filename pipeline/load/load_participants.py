@@ -5,6 +5,7 @@ Load layer: writes targeting `users` table (User) and `streamers_on_stream` M2M.
 """
 
 import re
+from datetime import datetime, timezone
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -46,7 +47,12 @@ async def sync_stream_participants_from_title(session: AsyncSession, stream: Str
         if name in existing_logins:
             continue
         user = await get_or_create_user_by_login(session, name)
-        session.add(streamers_on_stream.insert().values(stream_id=stream.id, streamer_id=user.id))
+        session.add(streamers_on_stream.insert().values(
+            stream_id=stream.id,
+            streamer_id=user.id,
+            role="guest",
+            created_at=datetime.now(timezone.utc),
+        ))
         existing_logins.add(name)
         changed = True
 

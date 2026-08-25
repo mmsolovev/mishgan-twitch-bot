@@ -88,7 +88,7 @@ async def add_recommendation(
     if existing.first():
         return False
 
-    session.execute(
+    await session.execute(
         game_recommendations.insert().values(user_id=user.id, game_id=game.id, recommendation_note=note)
     )
     await session.flush()
@@ -134,6 +134,7 @@ async def create_game_with_igdb(
     release_date: datetime | None = None,
     steam_url: str | None = None,
     igdb_score: float | None = None,
+    description_en: str | None = None,
     description_ru: str | None = None,
     cover_url: str | None = None,
     raw_payload: str | None = None,
@@ -166,6 +167,7 @@ async def create_game_with_igdb(
         release_date=release_date,
         steam_url=steam_url,
         igdb_score=igdb_score,
+        description_en=description_en,
         description_ru=description_ru,
         cover_url=cover_url,
         raw_payload=_json.loads(raw_payload) if raw_payload else None,
@@ -185,7 +187,7 @@ async def add_igdb_note(session: AsyncSession, game_id: int, user_login: str = "
         )
     )
     if not existing.first():
-        session.execute(
+        await session.execute(
             game_recommendations.insert().values(user_id=user.id, game_id=game_id, recommendation_note="Игра популярна")
         )
         await session.flush()
@@ -289,7 +291,7 @@ async def set_streamer_interested(session: AsyncSession, game_id: int, user_logi
     )
     row = result.first()
     if row is None:
-        session.execute(
+        await session.execute(
             streamer_games.insert().values(
                 streamer_id=user.id, game_id=game_id, interested=interested,
                 updated_at=datetime.now(timezone.utc),

@@ -88,7 +88,6 @@ async def _sync_vods(session, *, only_stream_ids: set[int] | None = None) -> tup
         return (0, 0)
 
     from services.token_service import try_refresh_token
-    from pipeline.load.load_streams import VodSyncStats
     from pipeline.transform.streams_transform import build_vods_index, is_match, pick_vod_candidates, StreamForVodMatch
 
     timeout = aiohttp.ClientTimeout(total=30)

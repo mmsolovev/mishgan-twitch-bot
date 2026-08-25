@@ -111,7 +111,7 @@ async def _process_single_game(
         release_date=metadata.release_date,
         steam_url=metadata.steam_url,
         igdb_score=_parse_igdb_score(metadata.rating_text),
-        description_ru=metadata.description_short,
+        description_en=metadata.description_short,
         cover_url=metadata.cover_url,
         raw_payload=metadata.source_payload,
     )

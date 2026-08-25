@@ -293,3 +293,207 @@ def load_games_json(path: Path) -> list[TwitchTrackerGameRow]:
 
     out.sort(key=lambda x: (x.rank, x.name.casefold()))
     return out
+
+
+# ---------------------------------------------------------------------------
+# Stream page (single-stream detail page from TwitchTracker)
+# ---------------------------------------------------------------------------
+
+@dataclass(frozen=True, slots=True)
+class TitleChange:
+    time: str
+    offset: str | None
+    title: str
+
+
+@dataclass(frozen=True, slots=True)
+class StreamGameEntry:
+    name: str
+    twitch_game_id: str | None
+    avg_viewers: int
+    peak_viewers: int
+    duration_minutes: int
+    followers_gained: int
+
+
+@dataclass(frozen=True, slots=True)
+class StreamPageData:
+    date: datetime
+    started_at: datetime
+    ended_at: datetime | None
+    duration_minutes: int
+    avg_viewers: int
+    peak_viewers: int
+    followers_gained: int
+    title_changes: list[TitleChange]
+    games: list[StreamGameEntry]
+
+
+def _parse_duration_to_minutes(value: str) -> int:
+    """Parse '7h29m' or '2h34m' or '1h' or '45m' to minutes."""
+    s = value.replace(" ", "").replace("<small>", "").replace("</small>", "")
+    hours = 0
+    minutes = 0
+    if "h" in s:
+        parts = s.split("h")
+        hours = int(parts[0]) if parts[0] else 0
+        rest = parts[1] if len(parts) > 1 else ""
+        rest = rest.replace("m", "")
+        minutes = int(rest) if rest else 0
+    elif "m" in s:
+        minutes = int(s.replace("m", ""))
+    return hours * 60 + minutes
+
+
+def _parse_k_number(value: str) -> int:
+    """Parse '2.8K' → 2800, '6,450' → 6450, '1,266' → 1266."""
+    s = value.strip().replace(",", "")
+    if s.upper().endswith("K"):
+        return int(float(s[:-1]) * 1000)
+    return int(float(s))
+
+
+def _parse_stream_timestamp(value: str) -> datetime | None:
+    """Parse 'Thu, Aug 13, 12:45' → datetime (year defaults to today)."""
+    try:
+        parts = value.split(", ", 1)
+        date_str = parts[1] if len(parts) > 1 else value
+        # Format without year: "Aug 13, 12:45"
+        dt = datetime.strptime(date_str, "%b %d, %H:%M")
+        # Assume current year since TwitchTracker omits it
+        from datetime import date as _date
+        return dt.replace(year=_date.today().year)
+    except (ValueError, IndexError):
+        return None
+
+
+def _parse_stream_page_date(value: str) -> datetime | None:
+    """Parse 'August 13, 2026' → datetime."""
+    try:
+        return datetime.strptime(value.strip(), "%B %d, %Y")
+    except ValueError:
+        return None
+
+
+def _parse_stream_page_summary(soup: BeautifulSoup) -> dict[str, Any]:
+    """Extract stream summary metrics from the page."""
+    result: dict[str, Any] = {}
+
+    # Date from h3 headline
+    date_el = soup.find("span", attrs={"data-date-format": True})
+    if date_el:
+        result["date"] = _parse_stream_page_date(date_el.get_text(strip=True))
+
+    # Summary metrics — only blocks NOT inside a <section>
+    blocks = soup.find_all("div", class_="g-x-s-block")
+    for block in blocks:
+        # Skip blocks inside sections (those belong to per-game tables)
+        if block.find_parent("section"):
+            continue
+
+        label_el = block.find("div", class_="g-x-s-label")
+        value_el = block.find("div", class_="g-x-s-value")
+        if not label_el or not value_el:
+            continue
+        label = label_el.get_text(strip=True).lower()
+        raw_value = value_el.get_text(strip=True)
+
+        if "stream duration" in label:
+            result["duration_minutes"] = _parse_duration_to_minutes(raw_value)
+        elif "avg viewers" in label:
+            result["avg_viewers"] = _parse_k_number(raw_value)
+        elif "peak viewers" in label:
+            result["peak_viewers"] = _parse_k_number(raw_value)
+        elif "followers gained" in label:
+            result["followers_gained"] = _parse_k_number(raw_value)
+
+    # Timestamps (started/ended)
+    timestamps_div = soup.find("div", class_="stream-timestamps")
+    if timestamps_div:
+        dt_els = timestamps_div.find_all("div", class_="stream-timestamp-dt")
+        if len(dt_els) >= 1:
+            result["started_at"] = _parse_stream_timestamp(dt_els[0].get_text(strip=True))
+        if len(dt_els) >= 2:
+            result["ended_at"] = _parse_stream_timestamp(dt_els[1].get_text(strip=True))
+
+    return result
+
+
+def _parse_title_changes(soup: BeautifulSoup) -> list[TitleChange]:
+    """Extract title change history from section#stream-titles."""
+    section = soup.find("section", id="stream-titles")
+    if not section:
+        return []
+
+    changes: list[TitleChange] = []
+    for line_div in section.find_all("div", class_="line"):
+        spans = line_div.find_all("span")
+        if len(spans) >= 3:
+            time_str = spans[0].get_text(strip=True)
+            offset_raw = spans[1].get_text(strip=True)
+            title = spans[2].get_text(strip=True)
+            offset = offset_raw if offset_raw and offset_raw != "Start" else None
+            changes.append(TitleChange(time=time_str, offset=offset, title=title))
+
+    return changes
+
+
+def _parse_stream_games(soup: BeautifulSoup) -> list[StreamGameEntry]:
+    """Extract per-game metrics from section#stream-games."""
+    section = soup.find("section", id="stream-games")
+    if not section:
+        return []
+
+    games: list[StreamGameEntry] = []
+    for wrapper in section.find_all("div", class_="g-x-wrapper"):
+        # Game name and twitch ID from link
+        title_link = wrapper.find("a", class_="g-x-s-title")
+        if not title_link:
+            continue
+        game_name = title_link.get_text(strip=True)
+        href = title_link.get("href", "")
+        twitch_game_id = None
+        if "/tabula/games/" in href:
+            twitch_game_id = href.split("/tabula/games/")[-1].strip("/")
+
+        # Metrics
+        metrics: dict[str, str] = {}
+        for block in wrapper.find_all("div", class_="g-x-s-block"):
+            label_el = block.find("div", class_="g-x-s-label")
+            value_el = block.find("div", class_="g-x-s-value")
+            if label_el and value_el:
+                metrics[label_el.get_text(strip=True).lower()] = value_el.get_text(strip=True)
+
+        games.append(StreamGameEntry(
+            name=game_name,
+            twitch_game_id=twitch_game_id,
+            avg_viewers=_parse_k_number(metrics.get("avg viewers", "0")),
+            peak_viewers=_parse_k_number(metrics.get("peak viewers", "0")),
+            duration_minutes=_parse_duration_to_minutes(metrics.get("duration", "0m")),
+            followers_gained=_parse_k_number(metrics.get("followers gained", "0")),
+        ))
+
+    return games
+
+
+def parse_stream_page_html(path: Path) -> StreamPageData | None:
+    """Parse a single TwitchTracker stream detail page into StreamPageData."""
+    soup = _load_soup(path)
+    summary = _parse_stream_page_summary(soup)
+
+    date = summary.get("date")
+    started_at = summary.get("started_at")
+    if not date and not started_at:
+        return None
+
+    return StreamPageData(
+        date=date or started_at.replace(hour=0, minute=0, second=0, microsecond=0),
+        started_at=started_at or date,
+        ended_at=summary.get("ended_at"),
+        duration_minutes=summary.get("duration_minutes", 0),
+        avg_viewers=summary.get("avg_viewers", 0),
+        peak_viewers=summary.get("peak_viewers", 0),
+        followers_gained=summary.get("followers_gained", 0),
+        title_changes=_parse_title_changes(soup),
+        games=_parse_stream_games(soup),
+    )
