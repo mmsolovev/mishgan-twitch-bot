@@ -10,7 +10,7 @@ from services.holiday_service import (
     get_all_today_names,
     get_by_index,
     get_holidays_by_date,
-    search_holiday
+    search_holiday,
 )
 
 
@@ -33,7 +33,7 @@ def setup(bot):
 
         # 🔹 без аргументов → случайный
         if not args:
-            holiday = get_random_today()
+            holiday = await get_random_today()
 
             if not holiday:
                 await ctx.send("MrDestructoid Сегодня праздников нет")
@@ -49,7 +49,7 @@ def setup(bot):
 
         # 🔹 все
         if arg1 == "все":
-            names = get_all_today_names()
+            names = await get_all_today_names()
 
             if not names:
                 await ctx.send("MrDestructoid Сегодня праздников нет")
@@ -60,7 +60,7 @@ def setup(bot):
 
         # 🔹 дата
         if "-" in arg1:
-            holidays = get_holidays_by_date(arg1)
+            holidays = await get_holidays_by_date(arg1)
 
             if not holidays:
                 await ctx.send("MrDestructoid Нет праздников на эту дату")
@@ -69,7 +69,7 @@ def setup(bot):
             # дата + номер
             if len(args) > 1 and args[1].isdigit():
                 idx = int(args[1]) - 1
-                holiday = get_by_index(arg1, idx)
+                holiday = await get_by_index(arg1, idx)
 
                 if not holiday:
                     await ctx.send("MrDestructoid Нет такого номера damn")
@@ -90,7 +90,7 @@ def setup(bot):
             idx = int(arg1) - 1
             today = get_today_key()
 
-            holiday = get_by_index(today, idx)
+            holiday = await get_by_index(today, idx)
 
             if not holiday:
                 await ctx.send("MrDestructoid Нет такого номера damn")
@@ -102,7 +102,7 @@ def setup(bot):
             return
 
         # 🔹 поиск
-        results = search_holiday(arg1)
+        results = await search_holiday(arg1)
 
         if not results:
             await ctx.send("MrDestructoid Ничего не найдено damn")
