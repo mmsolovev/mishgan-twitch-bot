@@ -5,7 +5,7 @@ Load layer: writes targeting `games`, `game_metadata_igdb`, `game_recommendation
 `streamer_games` tables — replaces old RecommendedGame / RecommendedGameVote.
 """
 
-from datetime import datetime, timezone
+from datetime import datetime
 
 from sqlalchemy import select, delete
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -105,7 +105,7 @@ async def create_game(
     if not normalized:
         raise ValueError("Game name is empty")
 
-    now = datetime.now(timezone.utc)
+    now = datetime.utcnow()
     if not slug:
         slug = name.lower().replace(" ", "-")
 
@@ -143,7 +143,7 @@ async def create_game_with_igdb(
     if not normalized:
         raise ValueError("Game name is empty")
 
-    now = datetime.now(timezone.utc)
+    now = datetime.utcnow()
     slug = name.lower().replace(" ", "-")
 
     game = Game(name=name.strip(), slug=slug, created_at=now, updated_at=now)
@@ -294,7 +294,7 @@ async def set_streamer_interested(session: AsyncSession, game_id: int, user_logi
         await session.execute(
             streamer_games.insert().values(
                 streamer_id=user.id, game_id=game_id, interested=interested,
-                updated_at=datetime.now(timezone.utc),
+                updated_at=datetime.utcnow(),
             )
         )
         await session.flush()
@@ -306,7 +306,7 @@ async def set_streamer_interested(session: AsyncSession, game_id: int, user_logi
                 streamer_games.c.streamer_id == user.id,
                 streamer_games.c.game_id == game_id,
             )
-            .values(interested=interested, updated_at=datetime.now(timezone.utc))
+            .values(interested=interested, updated_at=datetime.utcnow())
         )
         await session.flush()
         return True
@@ -318,7 +318,7 @@ async def get_upcoming_games(session: AsyncSession) -> list[Game]:
         select(Game)
         .options(selectinload(Game.igdb_metadata))
         .join(GameMetadataIGDB, Game.id == GameMetadataIGDB.game_id)
-        .where(GameMetadataIGDB.release_date > datetime.now(timezone.utc))
+        .where(GameMetadataIGDB.release_date > datetime.utcnow())
     )
     return list(result.scalars().all())
 
@@ -326,7 +326,7 @@ async def get_upcoming_games(session: AsyncSession) -> list[Game]:
 async def update_release_dates(session: AsyncSession, games_to_update: list[Game]) -> int:
     if not games_to_update:
         return 0
-    now = datetime.now(timezone.utc)
+    now = datetime.utcnow()
     for game in games_to_update:
         game.updated_at = now
         session.add(game)

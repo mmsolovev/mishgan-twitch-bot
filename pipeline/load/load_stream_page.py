@@ -5,7 +5,7 @@ Load layer: writes stream-page data to DB (streams, stream_titles,
 stream_games per-game metrics, game_stats aggregation).
 """
 
-from datetime import datetime, timezone
+from datetime import datetime
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -13,6 +13,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from database.models import Game, GameStats, Stream, StreamGame, StreamTitle
 from pipeline.ingest.twitchtracker_parser import StreamGameEntry, StreamPageData
 from pipeline.load.load_games import get_or_create_game
+
+
+def _log(message: str) -> None:
+    print(message, flush=True)
 
 
 async def _find_stream_by_date(session: AsyncSession, dt: datetime) -> Stream | None:
@@ -43,23 +47,18 @@ async def upsert_stream_from_page(
             external_id=external_id or page.date.date().isoformat(),
             started_at=page.started_at,
             ended_at=page.ended_at,
-            created_at=datetime.now(timezone.utc),
+            created_at=datetime.utcnow(),
         )
         session.add(stream)
         await session.flush()
         created = True
+        _log(f"  Created stream id={stream.id}, external_id={stream.external_id}")
+    else:
+        _log(f"  Found existing stream id={stream.id}")
 
     changed = created
 
-    # Write external_id (only for new Twitch IDs, don't overwrite date strings)
-    if external_id and not stream.external_id:
-        stream.external_id = external_id
-        changed = True
-    elif external_id and stream.external_id and not stream.external_id.startswith("20"):
-        # external_id is already a Twitch ID, check if we need to update
-        pass
-    # If existing external_id is a date string and we now have a Twitch ID, upgrade it
-    if external_id and stream.external_id and stream.external_id.startswith("20"):
+    if external_id and stream.external_id != external_id:
         stream.external_id = external_id
         changed = True
 
@@ -91,7 +90,7 @@ async def upsert_stream_from_page(
         stream.title = page.title_changes[0].title if page.title_changes else ""
         changed = True
 
-    stream.updated_at = datetime.now(timezone.utc)
+    stream.updated_at = datetime.utcnow()
 
     return stream, created
 
@@ -103,30 +102,38 @@ async def upsert_stream_titles(
 ) -> int:
     """Insert new title changes. Returns number of titles added."""
     if not page.title_changes:
+        _log("  No title changes parsed")
         return 0
+
+    _log(f"  Processing {len(page.title_changes)} title change(s), stream_id={stream.id}")
 
     existing_result = await session.execute(
         select(StreamTitle.title, StreamTitle.started_at).where(StreamTitle.stream_id == stream.id)
     )
     existing_titles = {(row[0], row[1]) for row in existing_result.all()}
+    _log(f"  Existing titles in DB: {len(existing_titles)}")
 
     added = 0
     for i, tc in enumerate(page.title_changes):
-        # Parse the time string to a datetime
         title_time = _parse_title_time(tc.time, page.date)
-        if (tc.title, title_time) in existing_titles:
+        key = (tc.title, title_time)
+        if key in existing_titles:
+            _log(f"  Skipping duplicate title: {tc.title[:50]} @ {title_time}")
             continue
 
         is_initial = (i == 0 and tc.offset is None)
-        session.add(StreamTitle(
+        st = StreamTitle(
             stream_id=stream.id,
             title=tc.title,
             started_at=title_time,
             is_initial=is_initial,
-            created_at=datetime.now(timezone.utc),
-        ))
+            created_at=datetime.utcnow(),
+        )
+        session.add(st)
         added += 1
+        _log(f"  + Title: {tc.title[:60]} @ {title_time} (initial={is_initial})")
 
+    _log(f"  Titles added this run: {added}")
     return added
 
 
@@ -148,7 +155,7 @@ async def upsert_stream_games_from_page(
 ) -> int:
     """
     Update stream_games rows with per-game metrics from page.
-    Creates new StreamGame rows if missing. Returns number of rows added/updated.
+    Creates new StreamGame rows if missing. Returns number of rows changed.
     """
     if not page.games:
         return 0
@@ -167,11 +174,11 @@ async def upsert_stream_games_from_page(
             sg = StreamGame(stream_id=stream.id, game_id=game.id, position=i)
             session.add(sg)
             changed += 1
+            _log(f"  + StreamGame: {entry.name} (id={game.id})")
         elif sg.position != i:
             sg.position = i
             changed += 1
 
-        # Update per-game metrics (only from page, never from list)
         if sg.avg_viewers != entry.avg_viewers:
             sg.avg_viewers = entry.avg_viewers
             changed += 1
@@ -192,17 +199,17 @@ async def increment_game_stats_hours(
     session: AsyncSession,
     page: StreamPageData,
     game_cache: dict[str, Game],
-) -> int:
+) -> list[tuple[str, float]]:
     """
-    Increment GameStats.streamed_hours for each game played.
-    Duration is taken from page (total stream duration, split equally among games
-    since per-game duration_minutes is already in stream_games).
-    Returns number of rows updated.
+    Increment GameStats.streamed_hours and update last_stream for each game played.
+    Returns list of (game_name, hours_added).
     """
     if not page.games:
-        return 0
+        return []
 
-    updated = 0
+    stream_date = page.started_at or page.date
+
+    results: list[tuple[str, float]] = []
     for entry in page.games:
         game = await get_or_create_game(session, game_cache, entry.name)
 
@@ -213,17 +220,29 @@ async def increment_game_stats_hours(
             gs = GameStats(game_id=game.id)
             session.add(gs)
 
-        # Add per-game duration (from stream_games data, not total)
         hours = entry.duration_minutes / 60.0 if entry.duration_minutes else 0
-        gs.streamed_hours = (gs.streamed_hours or 0) + hours
-        gs.synced_at = datetime.now(timezone.utc)
-        updated += 1
+        old_hours = gs.streamed_hours or 0
+        gs.streamed_hours = old_hours + hours
+        gs.synced_at = datetime.utcnow()
 
-    return updated
+        # Update last_stream if this stream is newer
+        if stream_date and (gs.last_stream is None or stream_date > gs.last_stream):
+            gs.last_stream = stream_date
+
+        results.append((entry.name, hours))
+
+    return results
 
 
-async def update_streams_count(session: AsyncSession) -> int:
-    """Recomputes GameStats.streams_count from stream_games table."""
+async def update_streams_count(
+    session: AsyncSession,
+    only_game_ids: set[int] | None = None,
+) -> list[tuple[str, int, int]]:
+    """
+    Recomputes GameStats.streams_count from stream_games table.
+    If only_game_ids is provided, only those games are updated.
+    Returns list of (game_name, old_count, new_count) for updated rows.
+    """
     from sqlalchemy import func
 
     result = await session.execute(
@@ -231,13 +250,23 @@ async def update_streams_count(session: AsyncSession) -> int:
     )
     counts_by_game_id = dict(result.all())
 
-    updated = 0
-    result = await session.execute(select(GameStats))
+    # Load game names
+    game_result = await session.execute(select(Game.id, Game.name))
+    id_to_name = {int(row[0]): row[1] for row in game_result.all()}
+
+    q = select(GameStats)
+    if only_game_ids:
+        q = q.where(GameStats.game_id.in_([int(i) for i in only_game_ids if int(i) > 0]))
+
+    updated: list[tuple[str, int, int]] = []
+    result = await session.execute(q)
     for stats in result.scalars().all():
         new_value = int(counts_by_game_id.get(stats.game_id, 0))
-        if int(stats.streams_count or 0) != new_value:
+        old_value = int(stats.streams_count or 0)
+        if old_value != new_value:
+            game_name = id_to_name.get(int(stats.game_id), f"#{stats.game_id}")
             stats.streams_count = new_value
-            updated += 1
+            updated.append((game_name, old_value, new_value))
 
     return updated
 
