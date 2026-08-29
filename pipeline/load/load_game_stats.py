@@ -5,7 +5,7 @@ Load layer: writes targeting `game_stats` table (GameStats).
 """
 
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import datetime
 
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -61,7 +61,7 @@ async def sync_game_stats(
                 setattr(game_stats, attr, value)
                 changed = True
 
-        game_stats.synced_at = datetime.now(timezone.utc)
+        game_stats.synced_at = datetime.utcnow()
 
         if created:
             stats = SyncStats(added=stats.added + 1, updated=stats.updated, unchanged=stats.unchanged, deleted=stats.deleted)

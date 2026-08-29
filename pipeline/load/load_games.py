@@ -4,7 +4,7 @@ from __future__ import annotations
 Load layer: writes targeting `games` table (Game).
 """
 
-from datetime import datetime, timezone
+from datetime import datetime
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -24,7 +24,7 @@ async def get_or_create_game(
 
     if game is None:
         slug = name.lower().replace(" ", "-")
-        game = Game(name=name, slug=slug, created_at=datetime.now(timezone.utc), updated_at=datetime.now(timezone.utc))
+        game = Game(name=name, slug=slug, created_at=datetime.utcnow(), updated_at=datetime.utcnow())
         session.add(game)
         await session.flush()
 
@@ -35,7 +35,7 @@ async def get_or_create_game(
             normalized_alias=normalized,
             is_primary=True,
             source="manual",
-            created_at=datetime.now(timezone.utc),
+            created_at=datetime.utcnow(),
         )
         session.add(alias)
         await session.flush()

@@ -420,22 +420,37 @@ def _parse_stream_page_summary(soup: BeautifulSoup) -> dict[str, Any]:
 
 
 def _parse_title_changes(soup: BeautifulSoup) -> list[TitleChange]:
-    """Extract title change history from section#stream-titles."""
+    """Extract title change history.
+
+    Supports two HTML layouts:
+    1. section#stream-titles  — full history with timestamps (div.line > span×3)
+    2. section#stream-single-title — single current title in <p>
+    """
+    # --- layout 1: full history ---
     section = soup.find("section", id="stream-titles")
-    if not section:
-        return []
+    if section:
+        changes: list[TitleChange] = []
+        for line_div in section.find_all("div", class_="line"):
+            spans = line_div.find_all("span")
+            if len(spans) >= 3:
+                time_str = spans[0].get_text(strip=True)
+                offset_raw = spans[1].get_text(strip=True)
+                title = spans[2].get_text(strip=True)
+                offset = offset_raw if offset_raw and offset_raw != "Start" else None
+                changes.append(TitleChange(time=time_str, offset=offset, title=title))
+        if changes:
+            return changes
 
-    changes: list[TitleChange] = []
-    for line_div in section.find_all("div", class_="line"):
-        spans = line_div.find_all("span")
-        if len(spans) >= 3:
-            time_str = spans[0].get_text(strip=True)
-            offset_raw = spans[1].get_text(strip=True)
-            title = spans[2].get_text(strip=True)
-            offset = offset_raw if offset_raw and offset_raw != "Start" else None
-            changes.append(TitleChange(time=time_str, offset=offset, title=title))
+    # --- layout 2: single current title ---
+    single = soup.find("section", id="stream-single-title")
+    if single:
+        p = single.find("p")
+        if p:
+            title = p.get_text(strip=True)
+            if title:
+                return [TitleChange(time="0:00", offset=None, title=title)]
 
-    return changes
+    return []
 
 
 def _parse_stream_games(soup: BeautifulSoup) -> list[StreamGameEntry]:

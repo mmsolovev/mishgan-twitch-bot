@@ -8,7 +8,7 @@ from twitchio.http import Route
 
 import config.settings as settings
 from services.games_service import find_game_lookup
-from services.hltb_service import get_hltb_summary
+from services.hltb_service import get_hltb_summary, is_non_game_category
 from runtime.collector import RuntimeStreamCollector
 from utils.logger import get_logger
 
@@ -346,63 +346,21 @@ class EventSubService:
         return value.strftime("%d.%m.%Y")
 
     @staticmethod
-    def _is_valid_hltb_value(value: str) -> bool:
-        if not value:
-            return False
-
-        value = value.strip().lower()
-
-        # отсекаем явные заглушки
-        if value in {"?", "??", "н/д", "n/a", "unknown"}:
-            return False
-
-        # отсекаем строки с вопросами типа "?-?"
-        if "?" in value:
-            return False
-
-        # проверка на наличие чисел (хотя бы одно)
-        if not re.search(r"\d", value):
-            return False
-
-        return True
-
-    @staticmethod
-    def _extract_hours_from_hltb(value: str) -> str:
-        """Извлекает только числовое значение часов из строки HLTB."""
-        if not value:
-            return ""
-        # Берем первое числовое значение. Важно: не захватываем "голые" точки из строк вида "2.-4.".
-        match = re.search(r"(\d+(?:[.,]\d+)?)", value)
-        if match:
-            token = match.group(1).replace(",", ".").rstrip(".")
-            if token.endswith(".0"):
-                token = token[:-2]
-            return token
-        return ""
-
-    @staticmethod
     def _format_hltb_for_game_change(summary: str) -> str | None:
+        """Extract the overall playtime from the !hltb response header."""
         if not summary:
             return None
 
-        parts = [part.strip() for part in summary.split("|")]
-
-        if len(parts) < 3:
+        marker = "по HowLongToBeat "
+        idx = summary.find(marker)
+        if idx < 0:
             return None
 
-        story_raw = parts[1].removeprefix("Сюжет:").strip()
-        extra_raw = parts[2].removeprefix("Доп:").strip()
-
-        if not EventSubService._is_valid_hltb_value(story_raw) or not EventSubService._is_valid_hltb_value(extra_raw):
+        time_raw = summary[idx + len(marker):].split(" | ", 1)[0].strip()
+        if not time_raw or not re.search(r"\d", time_raw):
             return None
 
-        story_hours = EventSubService._extract_hours_from_hltb(story_raw)
-        extra_hours = EventSubService._extract_hours_from_hltb(extra_raw)
-
-        if not story_hours or not extra_hours:
-            return None
-
-        return f"Прохождение по HLTB {story_hours}-{extra_hours} ч"
+        return f"Прохождение по HLTB {time_raw}"
 
     async def fetch_live_stream_snapshot(self):
         streams = await self.bot.fetch_streams(
@@ -414,9 +372,4 @@ class EventSubService:
 
     @staticmethod
     def _is_ignored_game_category(category_name: str | None) -> bool:
-        # Сначала проверяем, пустая ли категория. Если да - игнорируем.
-        if not category_name or not category_name.strip():
-            return True
-
-        normalized = " ".join(category_name.casefold().split())
-        return normalized in {"just chatting", "special events", "games + demos", "retro", "variety"}
+        return is_non_game_category(category_name)
