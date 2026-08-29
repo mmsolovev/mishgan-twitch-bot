@@ -56,45 +56,6 @@ def _normalize_token(token: str) -> str:
     return "".join(normalized)
 
 
-def _is_within_one_edit(left: str, right: str) -> bool:
-    if left == right:
-        return True
-
-    left_len = len(left)
-    right_len = len(right)
-    if abs(left_len - right_len) > 1:
-        return False
-
-    if left_len > right_len:
-        left, right = right, left
-        left_len, right_len = right_len, left_len
-
-    index_left = 0
-    index_right = 0
-    edits = 0
-
-    while index_left < left_len and index_right < right_len:
-        if left[index_left] == right[index_right]:
-            index_left += 1
-            index_right += 1
-            continue
-
-        edits += 1
-        if edits > 1:
-            return False
-
-        if left_len == right_len:
-            index_left += 1
-            index_right += 1
-        else:
-            index_right += 1
-
-    if index_left < left_len or index_right < right_len:
-        edits += 1
-
-    return edits <= 1
-
-
 @lru_cache(maxsize=1)
 def load_banned_words() -> tuple[str, ...]:
     if not BANNED_WORDS_PATH.exists():
@@ -135,8 +96,7 @@ def censor_text(text: str) -> str:
         if not normalized_token:
             continue
 
-        should_censor = any(_is_within_one_edit(normalized_token, banned_word) for banned_word in banned_words)
-        if not should_censor:
+        if normalized_token not in banned_words:
             continue
 
         for index in range(match.start(), match.end()):

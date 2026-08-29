@@ -9,6 +9,7 @@ from services.command_registry import register_command
 from runtime.storage import ACTIVE_SESSION_FILE
 from utils.cooldowns import check_cooldown
 from utils.delays import human_delay
+from utils.time_format import format_duration_compact
 
 
 def _parse_iso(value: str | None) -> datetime | None:
@@ -18,15 +19,6 @@ def _parse_iso(value: str | None) -> datetime | None:
         return datetime.fromisoformat(value)
     except ValueError:
         return None
-
-
-def _format_duration(seconds: float) -> str:
-    if seconds < 0:
-        seconds = 0
-    total_minutes = int(seconds // 60)
-    hours = total_minutes // 60
-    minutes = total_minutes % 60
-    return f"{hours} ч {minutes} м"
 
 
 def _load_active_session() -> dict | None:
@@ -45,7 +37,7 @@ def _build_time_message(session: dict) -> str | None:
 
     now = datetime.now(timezone.utc)
     stream_seconds = (now - started_at).total_seconds()
-    stream_part = _format_duration(stream_seconds)
+    stream_part = format_duration_compact(stream_seconds)
 
     segments = session.get("game_segments") or []
     if not segments:
@@ -60,7 +52,7 @@ def _build_time_message(session: dict) -> str | None:
         seg_end = _parse_iso(seg.get("ended_at")) or now
         if seg_start is None:
             continue
-        dur = _format_duration((seg_end - seg_start).total_seconds())
+        dur = format_duration_compact((seg_end - seg_start).total_seconds())
         part = f"[{name}] {dur}"
         if parts and parts[-1].startswith(f"[{name}]"):
             # схлопываем дубликаты подряд
