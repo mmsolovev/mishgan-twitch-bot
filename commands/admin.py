@@ -20,11 +20,11 @@ def setup(bot):
             return
 
         if not runtime.BOT_ENABLED:
-            await ctx.send("MrDestructoid Бот уже выключен Deadge")
+            await ctx.send("Бот уже выключен Deadge")
             return
 
         runtime.BOT_ENABLED = False
-        await ctx.send("MrDestructoid Бот ушёл спать Deadge")
+        await ctx.send("Бот ушёл спать Deadge")
 
     @commands.command(name="старт")
     async def start_bot(ctx):
@@ -32,11 +32,11 @@ def setup(bot):
             return
 
         if runtime.BOT_ENABLED:
-            await ctx.send("MrDestructoid Бот уже работает veryCat")
+            await ctx.send("Бот уже работает veryCat")
             return
 
         runtime.BOT_ENABLED = True
-        await ctx.send("MrDestructoid Бот снова в деле")
+        await ctx.send("Бот снова в деле Wokege")
 
     bot.add_command(stop_bot)
     bot.add_command(start_bot)

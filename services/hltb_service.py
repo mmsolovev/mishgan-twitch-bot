@@ -1,17 +1,24 @@
 import asyncio
+import importlib
 import re
+import subprocess
+import sys
+import time
 
 from howlongtobeatpy import HowLongToBeat, HowLongToBeatEntry
 from sqlalchemy import select
 from sqlalchemy.orm import selectinload
 
 from database.db import AsyncSessionLocal
-from database.models import Game, GameAlias, GameMetadataHLTB
+from database.models import Game, GameAlias, GameMetadataHLTB, GameMetadataIGDB
 from pipeline.ingest.igdb_api import fetch_igdb_metadata
 from pipeline.load.load_game_meta import apply_hltb_patch, apply_igdb_patch
 from pipeline.transform.recommendations_transform import normalize_recommendation_name
 from services.twitch_service import get_current_game
+from utils.logger import get_logger
 from utils.time_format import format_hours_minutes
+
+logger = get_logger("services.hltb")
 
 HLTB_COMMAND_DESCRIPTION = (
     "Команда: !hltb [название] — время прохождения игры с сайта HLTB, "
@@ -33,13 +40,23 @@ NON_GAME_CATEGORIES = {
 
 MIN_SIMILARITY = 0.60
 HLTB_REQUEST_TIMEOUT_SECONDS = 20
+HLTB_UPGRADE_COOLDOWN_SECONDS = 3600
+
+_HLTB_LAST_UPGRADE_AT = 0.0
+
+_HLTB_SUBMODULES = (
+    "HTMLRequests",
+    "JSONResultParser",
+    "HowLongToBeatEntry",
+    "HowLongToBeat",
+)
 
 _CATEGORY_LABELS = [
-    ("Сюжет", "hltb_main_story"),
-    ("Сюжет+Доп", "hltb_main_extra"),
-    ("Полное", "hltb_completionist"),
-    ("Кооп", "hltb_coop"),
-    ("Мультиплеер", "hltb_multiplayer"),
+    ("Сюжет:", "hltb_main_story"),
+    ("Сюжет+Доп:", "hltb_main_extra"),
+    ("Полное:", "hltb_completionist"),
+    ("Кооп:", "hltb_coop"),
+    ("Мультиплеер:", "hltb_multiplayer"),
 ]
 
 _ROMAN_TO_ARABIC = {
@@ -131,6 +148,57 @@ def _build_hltb_patch(entry: HowLongToBeatEntry) -> dict:
     }
 
 
+def _run_pip_upgrade_hltb() -> bool:
+    """Upgrade the howlongtobeatpy package in the current interpreter."""
+    try:
+        result = subprocess.run(
+            [sys.executable, "-m", "pip", "install", "--upgrade", "--quiet", "howlongtobeatpy"],
+            capture_output=True,
+            text=True,
+            timeout=180,
+        )
+        return result.returncode == 0
+    except Exception:
+        return False
+
+
+def _reload_hltb_modules() -> bool:
+    """Re-import howlongtobeatpy fresh from disk after an in-place upgrade."""
+    try:
+        import howlongtobeatpy
+
+        for sub in _HLTB_SUBMODULES:
+            name = f"howlongtobeatpy.{sub}"
+            if name in sys.modules:
+                importlib.reload(sys.modules[name])
+        importlib.reload(howlongtobeatpy)
+        globals()["HowLongToBeat"] = howlongtobeatpy.HowLongToBeat
+        globals()["HowLongToBeatEntry"] = howlongtobeatpy.HowLongToBeatEntry
+        return True
+    except Exception as exc:
+        logger.warning("howlongtobeatpy reload failed: %s", exc)
+        return False
+
+
+async def _maybe_upgrade_hltb_lib() -> bool:
+    """Best-effort auto-upgrade on request failures, once per cooldown."""
+    global _HLTB_LAST_UPGRADE_AT
+    now = time.monotonic()
+    if now - _HLTB_LAST_UPGRADE_AT < HLTB_UPGRADE_COOLDOWN_SECONDS:
+        return False
+    _HLTB_LAST_UPGRADE_AT = now
+
+    logger.warning("howlongtobeatpy: request failures detected, attempting auto-upgrade")
+    if not await asyncio.to_thread(_run_pip_upgrade_hltb):
+        logger.warning("howlongtobeatpy: auto-upgrade failed")
+        return False
+    if not await asyncio.to_thread(_reload_hltb_modules):
+        logger.warning("howlongtobeatpy: upgraded but reload failed; new version will apply on restart")
+        return False
+    logger.info("howlongtobeatpy: upgraded and reloaded")
+    return True
+
+
 async def _search_hltb_with_retries(query: str) -> tuple[HowLongToBeatEntry | None, bool]:
     """
     Search HLTB with retries on connection errors.
@@ -139,6 +207,7 @@ async def _search_hltb_with_retries(query: str) -> tuple[HowLongToBeatEntry | No
     failed (network / outage); True means HLTB responded but without a match.
     """
     service_error = False
+    upgraded = False
     for attempt in range(1, 4):
         try:
             entry = await asyncio.wait_for(
@@ -148,6 +217,8 @@ async def _search_hltb_with_retries(query: str) -> tuple[HowLongToBeatEntry | No
             return entry, True
         except (ConnectionError, TimeoutError, asyncio.TimeoutError):
             service_error = True
+            if not upgraded:
+                upgraded = await _maybe_upgrade_hltb_lib()
             if attempt < 3:
                 await asyncio.sleep(2.0 * attempt)
         except Exception:
@@ -161,7 +232,7 @@ def _build_message(title: str, meta: GameMetadataHLTB) -> str | None:
     times = _format_times(meta)
     if not times:
         return None
-    return f"Прохождение {title} по HowLongToBeat {times}"
+    return f"Прохождение {title} по HowLongToBeat: {times}"
 
 
 def _format_times(meta: GameMetadataHLTB) -> str:
@@ -221,6 +292,34 @@ async def _find_game(query: str) -> Game | None:
         return matches[0]
 
 
+async def _resolve_game(
+    session, query: str, entry: HowLongToBeatEntry, existing_game
+) -> Game:
+    """
+    Pick the Game row to enrich: reuse the DB row that already owns the HLTB
+    entry (avoids duplicates when the user typed another name for the same
+    game, e.g. "Gothic Remake" vs "Gothic 1 Remake").
+    """
+    if existing_game is not None:
+        return await session.get(Game, existing_game.id)
+
+    holder_id = (
+        await session.execute(
+            select(GameMetadataHLTB.game_id)
+            .where(GameMetadataHLTB.hltb_id == str(entry.game_id))
+            .limit(1)
+        )
+    ).scalar_one_or_none()
+    if holder_id is not None:
+        held = await session.get(Game, holder_id)
+        if held is not None:
+            return held
+
+    from pipeline.load.load_recommendations import create_game
+
+    return await create_game(session, name=query)
+
+
 async def _store_and_return(query: str, existing_game=None) -> tuple[str | None, str | None]:
     """
     Fetch HLTB (+IGDB enrichment) for a game, write everything to the DB,
@@ -232,8 +331,8 @@ async def _store_and_return(query: str, existing_game=None) -> tuple[str | None,
     entry, service_ok = await _search_hltb_with_retries(query)
     if entry is None:
         if service_ok:
-            return None, f"MrDestructoid Не удалось найти информацию по игре «{query.strip()}»"
-        return None, "MrDestructoid Сервис HowLongToBeat сейчас недоступен. Попробуйте позже."
+            return None, f"Не удалось найти информацию по игре «{query.strip()}»"
+        return None, "Сервис HowLongToBeat сейчас недоступен"
 
     patch = _build_hltb_patch(entry)
 
@@ -243,28 +342,30 @@ async def _store_and_return(query: str, existing_game=None) -> tuple[str | None,
         igdb_meta = None
 
     async with AsyncSessionLocal() as session:
-        if existing_game is not None:
-            game = await session.get(Game, existing_game.id)
-        else:
-            from pipeline.load.load_recommendations import create_game
-
-            game = await create_game(session, name=query)
-
+        game = await _resolve_game(session, query, entry, existing_game)
         game_id = int(game.id)
         await apply_hltb_patch(session, game_id=game_id, patch=patch)
 
         if igdb_meta is not None:
-            igdb_patch = {
-                key: value
-                for key, value in {
-                    "igdb_id": igdb_meta.source_game_id,
-                    "release_date": igdb_meta.release_date,
-                    "steam_url": igdb_meta.steam_url,
-                    "description_en": igdb_meta.description_short,
-                    "cover_url": igdb_meta.cover_url,
-                }.items()
-                if value not in (None, "")
+            igdb_id = str(igdb_meta.source_game_id)
+            holder_game_id = (
+                await session.execute(
+                    select(GameMetadataIGDB.game_id).where(
+                        GameMetadataIGDB.igdb_id == igdb_id,
+                        GameMetadataIGDB.game_id != game_id,
+                    )
+                )
+            ).scalar_one_or_none()
+
+            fields = {
+                "release_date": igdb_meta.release_date,
+                "steam_url": igdb_meta.steam_url,
+                "description_en": igdb_meta.description_short,
+                "cover_url": igdb_meta.cover_url,
             }
+            if holder_game_id is None:
+                fields["igdb_id"] = igdb_id
+            igdb_patch = {key: value for key, value in fields.items() if value not in (None, "")}
             if igdb_patch:
                 await apply_igdb_patch(session, game_id=game_id, patch=igdb_patch)
 
@@ -273,16 +374,16 @@ async def _store_and_return(query: str, existing_game=None) -> tuple[str | None,
         meta = await session.get(GameMetadataHLTB, game_id)
 
     if meta is None:
-        return None, f"MrDestructoid Не удалось найти информацию по игре «{query.strip()}»"
+        return None, f"Не удалось найти информацию по игре «{query.strip()}»"
 
     message = _build_message(meta.hltb_name or query, meta)
     if message is None:
-        return None, f"MrDestructoid Не удалось найти информацию по игре «{query.strip()}»"
+        return None, f"Не удалось найти информацию по игре «{query.strip()}»"
 
     return message, None
 
 
-def _clean_user_query(game: str) -> str:
+def clean_user_query(game: str) -> str:
     return game.strip().strip('"').strip("«»").strip()
 
 
@@ -291,12 +392,12 @@ async def get_hltb_info(game: str | None) -> str:
     if not game:
         game = await get_current_game()
         if not game:
-            return "MrDestructoid Не удалось определить текущую категорию стрима."
+            return "Не удалось определить текущую категорию стрима"
 
         if is_non_game_category(game):
             return HLTB_COMMAND_DESCRIPTION
     else:
-        game = _clean_user_query(game)
+        game = clean_user_query(game)
 
     row = await _find_game(game)
     if row is not None and row.hltb_metadata is not None:
@@ -307,7 +408,7 @@ async def get_hltb_info(game: str | None) -> str:
     message, error = await _store_and_return(game, existing_game=row)
     if message:
         return message
-    return error or "MrDestructoid Нет данных по игре."
+    return error or "Нет данных по игре"
 
 
 async def get_hltb_summary(game: str | None) -> str | None:

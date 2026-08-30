@@ -218,6 +218,9 @@ class BotCommand(Base):
     name = Column(String(50), nullable=False, unique=True)
     description = Column(Text, nullable=False)
     created_at = Column(DateTime)
+    is_visible = Column(Boolean, default=True)
+    is_active = Column(Boolean, default=True)
+    bot_name = Column(String(50), nullable=False, default="self")
 
 
 class BotCommandAlias(Base):

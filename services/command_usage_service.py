@@ -31,6 +31,9 @@ async def ensure_bot_commands(session: AsyncSession) -> None:
                 name=name,
                 description=info["description"],
                 created_at=_utcnow(),
+                bot_name="self",
+                is_active=True,
+                is_visible=True,
             )
             session.add(cmd)
             await session.flush()
