@@ -43,7 +43,7 @@ def _build_time_message(session: dict) -> str | None:
     if not segments:
         # показываем текущую категорию, если сегментов нет
         category = session.get("category_name") or "?"
-        return f"Стрим идет {stream_part} | [{category}] {stream_part}"
+        return f"Стрим идет {stream_part} | {category} {stream_part}"
 
     parts: list[str] = []
     for seg in segments:
@@ -91,7 +91,7 @@ def setup(bot):
         message = _build_time_message(session)
         if not message:
             await human_delay()
-            await ctx.send("Не смог посчитать время стрима")
+            await ctx.send("Не смог посчитать время стрима damn")
             return
 
         await human_delay()

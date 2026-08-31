@@ -5,7 +5,9 @@ Google Sheets delivery: Streams worksheet sync.
 """
 
 from database.db import AsyncSessionLocal
-from database.models import Stream, StreamGame, User, StreamRecording, streamers_on_stream
+from database.models import (
+    Stream, StreamGame, User, StreamRecording, Genre, game_genres, streamers_on_stream,
+)
 from config.settings import SPREADSHEET_NAME, STREAMS_SHEET_NAME
 from pipeline.delivery.sheets_utils import build_hyperlink_formula, get_client
 from pipeline.transform.sheets_transform import normalize_row as _normalize_row
@@ -19,16 +21,42 @@ def _stream_display_date(stream: Stream) -> str:
 
 
 async def _build_stream_row(session: AsyncSession, stream: Stream) -> list:
-    games = " -> ".join(
-        sg.game.name for sg in stream.stream_games if sg.game
-    )
+    stream_games = [sg.game for sg in stream.stream_games if sg.game]
+    games = " -> ".join(game.name for game in stream_games)
 
     result = await session.execute(
         select(User.display_name)
         .join(streamers_on_stream, streamers_on_stream.c.streamer_id == User.id)
         .where(streamers_on_stream.c.stream_id == stream.id)
     )
-    participants = " ".join(row[0] for row in result.all() if row[0])
+    participant_names = [row[0] for row in result.all() if row[0]]
+    participants = " ".join(participant_names)
+
+    game_ids = [game.id for game in stream_games]
+    genre_names = []
+    if game_ids:
+        genres_result = await session.execute(
+            select(Genre.abbreviation, Genre.name)
+            .join(game_genres, game_genres.c.genre_id == Genre.id)
+            .where(game_genres.c.game_id.in_(game_ids))
+        )
+        seen_genres = set()
+        for abbreviation, name in genres_result.all():
+            genre = abbreviation or name
+            if genre and genre not in seen_genres:
+                seen_genres.add(genre)
+                genre_names.append(genre)
+
+    game_names = {game.name for game in stream_games}
+    stream_tags = []
+    if game_names == {"Just Chatting"}:
+        stream_tags.append("Общение")
+    if genre_names:
+        stream_tags.append(", ".join(genre_names))
+    if participant_names:
+        stream_tags.append("Кооп")
+    if "IRL" in (stream.title or "") or "IRL" in game_names:
+        stream_tags.append("IRL")
 
     vod_result = await session.execute(
         select(StreamRecording.url)
@@ -53,7 +81,7 @@ async def _build_stream_row(session: AsyncSession, stream: Stream) -> list:
         "",
         "",
         "",
-        "",
+        ", ".join(stream_tags),
         participants,
     ]
 
@@ -160,7 +188,7 @@ def _stream_comparable_row(row):
 def _build_stream_comparable_row(row: list, manual_columns=None) -> list[str]:
     comparable = [str(value) for value in row]
     if manual_columns is not None:
-        comparable[6:10] = [str(value) for value in manual_columns]
+        comparable[5:11] = [str(value) for value in manual_columns]
     return comparable
 
 
@@ -216,8 +244,8 @@ async def sync_streams_safe() -> None:
             row_key = (_stream_display_date(stream), stream.title)
             if row_key in existing:
                 old_row = existing[row_key]
-                row[6:10] = old_row[6:10]
-                comp_row = _build_stream_comparable_row(row, manual_columns=old_row[6:10])
+                row[5:11] = old_row[5:11]
+                comp_row = _build_stream_comparable_row(row, manual_columns=old_row[5:11])
             else:
                 comp_row = _build_stream_comparable_row(row)
             final_rows.append(row)

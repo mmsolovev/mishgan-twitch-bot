@@ -3,11 +3,11 @@ from dataclasses import dataclass
 from difflib import SequenceMatcher
 
 from sqlalchemy import func, select
-from sqlalchemy.ext.asyncio import AsyncSession
 
 from config.settings import GAMES_SHEET_URL, RECOMMENDATIONS_STREAMER_LOGIN
 from database.db import AsyncSessionLocal
-from database.models import Game, GameStats, GameMetadataHLTB, StreamGame, User, streamer_games
+from database.models import Game, GameStats, StreamGame, User, streamer_games
+from utils.time_format import format_hours_minutes
 
 
 MAX_VISIBLE_SUGGESTIONS = 3
@@ -71,13 +71,6 @@ def _extract_number_tokens(value: str) -> set[str]:
     return {token for token in _canonicalize_text(value).split() if token.isdigit()}
 
 
-def _format_hours(value: float | None) -> str:
-    if value is None:
-        return "н/д"
-    formatted = f"{value:.1f}".rstrip("0").rstrip(".")
-    return formatted
-
-
 def _format_date(value) -> str:
     if not value:
         return "н/д"
@@ -97,7 +90,7 @@ def _format_status(liked: bool | None, completed: bool | None) -> str | None:
 def _doc_suffix() -> str:
     if GAMES_SHEET_URL:
         return f" | Все игры канала {GAMES_SHEET_URL}"
-    return " Таблица игр: ссылка не настроена"
+    return " Список игр: ссылка не настроена"
 
 
 async def _load_ranked_games() -> list[GameLookupResult]:
@@ -209,9 +202,9 @@ def _find_similar_matches(query: str, ranked_games: list[GameLookupResult]) -> l
 def _format_game_stats(match: GameLookupResult) -> str:
     parts = [
         f"Игра: {match.name}",
-        f"Количество стримов {match.streams_count}",
-        f"В последний раз {_format_date(match.last_stream)}",
-        f"Часов {_format_hours(match.hours_streamed)} (#{match.rank})",
+        f"Стримов по игре: {match.streams_count}",
+        f"Последний стрим: {_format_date(match.last_stream)}",
+        f"Времени в игре: {format_hours_minutes(match.hours_streamed) or 'н/д'} (#{match.rank})",
     ]
     status = _format_status(match.liked, match.completed)
     if status:
@@ -261,7 +254,7 @@ async def find_game_lookup(query: str) -> GameLookupResult | None:
 
 
 def build_games_help_message() -> str:
-    return "MrDestructoid Написать в чат: !игры [название игры] — вывод статистики со стримов по игре" + _doc_suffix()
+    return "Написать в чат: !игры [название игры] — вывод статистики со стримов по игре" + _doc_suffix()
 
 
 async def build_game_response(query: str) -> str:
@@ -274,11 +267,11 @@ async def build_game_response(query: str) -> str:
         return _format_game_stats(exact_match) + _doc_suffix()
     similar_matches = _find_similar_matches(query, ranked_games)
     if not similar_matches:
-        return f"MrDestructoid Игра «{query}» не найдена, и похожих вариантов тоже нет. Скорее всего этой игры на стримах не было." + _doc_suffix()
+        return f"Игра «{query}» не найдена, и похожих вариантов тоже нет. Скорее всего этой игры на стримах не было." + _doc_suffix()
     best_match = similar_matches[0]
     other_matches = similar_matches[1:]
     if _is_confident_match(query, best_match, other_matches):
-        prefix = f"MrDestructoid Точного совпадения не найдено, но скорее всего это «{best_match.game.name}»."
+        prefix = f"Точного совпадения не найдено, но скорее всего это «{best_match.game.name}»."
         if other_matches:
             prefix += (
                 f" Есть и другие похожие результаты: {len(other_matches)}"
@@ -287,7 +280,7 @@ async def build_game_response(query: str) -> str:
         return prefix + " " + _format_game_stats(best_match.game) + _doc_suffix()
     suggestions = _format_suggestions(similar_matches)
     return (
-        f"MrDestructoid Точного совпадения для «{query}» не найдено. Возможно, имелось в виду: {suggestions}. "
+        f"Точного совпадения для «{query}» не найдено. Возможно, имелось в виду: {suggestions}. "
         "Если ничего не подходит, скорее всего этой игры на стримах не было"
         + _doc_suffix()
     )

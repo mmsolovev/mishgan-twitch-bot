@@ -10,13 +10,15 @@ from database.models import (
     GameStats,
     GameMetadataHLTB,
     GameMetadataIGDB,
+    Stream,
+    StreamGame,
     streamer_games,
     game_genres,
     game_platforms,
     Genre,
     Platform,
 )
-from config.settings import SPREADSHEET_NAME, GAMES_SHEET_NAME
+from config.settings import SHEETS_STREAMER_ID, SPREADSHEET_NAME, GAMES_SHEET_NAME
 from pipeline.delivery.sheets_utils import (
     build_hyperlink_formula,
     comparable_row,
@@ -24,7 +26,7 @@ from pipeline.delivery.sheets_utils import (
     get_client,
 )
 from pipeline.transform.sheets_transform import normalize_row as _normalize_row, parse_sheet_bool
-from sqlalchemy import select, func
+from sqlalchemy import func, or_, select
 
 
 async def _build_tags_text(session, game_id: int) -> str:
@@ -38,7 +40,14 @@ async def _build_tags_text(session, game_id: int) -> str:
     platforms_result = await session.execute(
         select(func.coalesce(Platform.abbreviation, Platform.name))
         .join(game_platforms, game_platforms.c.platform_id == Platform.id)
-        .where(game_platforms.c.game_id == game_id)
+        .where(
+            game_platforms.c.game_id == game_id,
+            or_(
+                Platform.name.in_({"PC (Microsoft Windows)", "PlayStation 4", "PlayStation 5"}),
+                Platform.abbreviation.in_({"PC", "PS4", "PS5"}),
+            ),
+        )
+        .order_by(Platform.name)
     )
     platforms = ", ".join(row[0] for row in platforms_result.all())
 
@@ -49,12 +58,24 @@ async def _build_tags_text(session, game_id: int) -> str:
 async def _get_game_streamer_flags(session, game_id: int) -> dict:
     result = await session.execute(
         select(
-            func.bool_or(streamer_games.c.liked),
-            func.bool_or(streamer_games.c.completed),
-        ).where(streamer_games.c.game_id == game_id)
+            streamer_games.c.liked,
+            streamer_games.c.completed,
+        ).where(
+            streamer_games.c.game_id == game_id,
+            streamer_games.c.streamer_id == SHEETS_STREAMER_ID,
+        ).limit(1)
     )
-    row = result.one()
-    return {"liked": bool(row[0]), "completed": bool(row[1])}
+    row = result.first()
+    return {"liked": bool(row[0]) if row else False, "completed": bool(row[1]) if row else False}
+
+
+async def _get_game_last_stream(session, game_id: int):
+    result = await session.execute(
+        select(func.max(Stream.started_at))
+        .join(StreamGame, StreamGame.stream_id == Stream.id)
+        .where(StreamGame.game_id == game_id)
+    )
+    return result.scalar_one_or_none()
 
 
 def _build_games_dataset(rows):
@@ -90,7 +111,7 @@ async def _sync_game_manual_fields_from_sheet(session, existing_rows):
 
         await session.execute(
             streamer_games.update()
-            .where(streamer_games.c.game_id == game.id, streamer_games.c.streamer_id == 1)
+            .where(streamer_games.c.game_id == game.id, streamer_games.c.streamer_id == SHEETS_STREAMER_ID)
             .values(liked=liked, completed=completed)
         )
 
@@ -210,7 +231,9 @@ async def sync_games() -> None:
     sheet = client.open(SPREADSHEET_NAME).worksheet(GAMES_SHEET_NAME)
 
     async with AsyncSessionLocal() as session:
-        result = await session.execute(select(Game).where(Game.is_active == True))
+        result = await session.execute(
+            select(Game).join(StreamGame, StreamGame.game_id == Game.id).distinct()
+        )
         games = result.scalars().unique().all()
 
         dataset_rows = []
@@ -234,10 +257,11 @@ async def sync_games() -> None:
 
             flags = await _get_game_streamer_flags(session, game.id)
             tags = await _build_tags_text(session, game.id)
+            last_stream = await _get_game_last_stream(session, game.id)
 
             dataset_rows.append({
                 "name": game.name,
-                "last_stream": stats.last_stream,
+                "last_stream": last_stream,
                 "streams_count": stats.streams_count,
                 "streamed_hours": stats.streamed_hours,
                 "hltb_all_styles": hltb.hltb_all_styles if hltb else None,
@@ -277,7 +301,9 @@ async def sync_games_safe() -> None:
         await _sync_game_manual_fields_from_sheet(session, existing)
         await session.commit()
 
-        result = await session.execute(select(Game).where(Game.is_active == True))
+        result = await session.execute(
+            select(Game).join(StreamGame, StreamGame.game_id == Game.id).distinct()
+        )
         games = result.scalars().unique().all()
 
         dataset_rows = []
@@ -301,10 +327,11 @@ async def sync_games_safe() -> None:
 
             flags = await _get_game_streamer_flags(session, game.id)
             tags = await _build_tags_text(session, game.id)
+            last_stream = await _get_game_last_stream(session, game.id)
 
             dataset_rows.append({
                 "name": game.name,
-                "last_stream": stats.last_stream,
+                "last_stream": last_stream,
                 "streams_count": stats.streams_count,
                 "streamed_hours": stats.streamed_hours,
                 "hltb_all_styles": hltb.hltb_all_styles if hltb else None,

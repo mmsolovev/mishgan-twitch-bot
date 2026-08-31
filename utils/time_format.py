@@ -1,7 +1,7 @@
 def _render_hours_minutes(hours: int, minutes: int) -> str:
     if minutes == 0:
-        return f"{hours}ч"
-    return f"{hours}ч {minutes}м"
+        return f"{hours} ч"
+    return f"{hours} ч {minutes} м"
 
 
 def format_hours_minutes(value: float | int | None) -> str | None:
