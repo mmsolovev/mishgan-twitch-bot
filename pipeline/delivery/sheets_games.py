@@ -10,6 +10,7 @@ from database.models import (
     GameStats,
     GameMetadataHLTB,
     GameMetadataIGDB,
+    Stream,
     StreamGame,
     streamer_games,
     game_genres,
@@ -25,7 +26,7 @@ from pipeline.delivery.sheets_utils import (
     get_client,
 )
 from pipeline.transform.sheets_transform import normalize_row as _normalize_row, parse_sheet_bool
-from sqlalchemy import select, func
+from sqlalchemy import func, or_, select
 
 
 async def _build_tags_text(session, game_id: int) -> str:
@@ -39,7 +40,14 @@ async def _build_tags_text(session, game_id: int) -> str:
     platforms_result = await session.execute(
         select(func.coalesce(Platform.abbreviation, Platform.name))
         .join(game_platforms, game_platforms.c.platform_id == Platform.id)
-        .where(game_platforms.c.game_id == game_id)
+        .where(
+            game_platforms.c.game_id == game_id,
+            or_(
+                Platform.name.in_({"PC (Microsoft Windows)", "PlayStation 4", "PlayStation 5"}),
+                Platform.abbreviation.in_({"PC", "PS4", "PS5"}),
+            ),
+        )
+        .order_by(Platform.name)
     )
     platforms = ", ".join(row[0] for row in platforms_result.all())
 
@@ -59,6 +67,15 @@ async def _get_game_streamer_flags(session, game_id: int) -> dict:
     )
     row = result.first()
     return {"liked": bool(row[0]) if row else False, "completed": bool(row[1]) if row else False}
+
+
+async def _get_game_last_stream(session, game_id: int):
+    result = await session.execute(
+        select(func.max(Stream.started_at))
+        .join(StreamGame, StreamGame.stream_id == Stream.id)
+        .where(StreamGame.game_id == game_id)
+    )
+    return result.scalar_one_or_none()
 
 
 def _build_games_dataset(rows):
@@ -240,10 +257,11 @@ async def sync_games() -> None:
 
             flags = await _get_game_streamer_flags(session, game.id)
             tags = await _build_tags_text(session, game.id)
+            last_stream = await _get_game_last_stream(session, game.id)
 
             dataset_rows.append({
                 "name": game.name,
-                "last_stream": stats.last_stream,
+                "last_stream": last_stream,
                 "streams_count": stats.streams_count,
                 "streamed_hours": stats.streamed_hours,
                 "hltb_all_styles": hltb.hltb_all_styles if hltb else None,
@@ -309,10 +327,11 @@ async def sync_games_safe() -> None:
 
             flags = await _get_game_streamer_flags(session, game.id)
             tags = await _build_tags_text(session, game.id)
+            last_stream = await _get_game_last_stream(session, game.id)
 
             dataset_rows.append({
                 "name": game.name,
-                "last_stream": stats.last_stream,
+                "last_stream": last_stream,
                 "streams_count": stats.streams_count,
                 "streamed_hours": stats.streamed_hours,
                 "hltb_all_styles": hltb.hltb_all_styles if hltb else None,
