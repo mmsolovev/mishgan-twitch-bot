@@ -18,7 +18,7 @@ from database.models import (
     game_recommendations,
     streamer_games,
 )
-from config.settings import RELEASES_SHEET_NAME
+from config.settings import RELEASES_SHEET_NAME, SHEETS_STREAMER_ID
 from pipeline.delivery.sheets_utils import (
     build_hyperlink_formula,
     build_recommenders_text,
@@ -264,20 +264,20 @@ async def sync_releases_safe() -> None:
             if sheet_value is True:
                 await session.execute(
                     streamer_games.update()
-                    .where(streamer_games.c.game_id == game.id, streamer_games.c.streamer_id == 1)
+                    .where(streamer_games.c.game_id == game.id, streamer_games.c.streamer_id == SHEETS_STREAMER_ID)
                     .values(interested=True)
                 )
             elif sheet_value is False:
                 sg_result = await session.execute(
                     select(streamer_games.c.interested)
-                    .where(streamer_games.c.game_id == game.id, streamer_games.c.streamer_id == 1)
+                    .where(streamer_games.c.game_id == game.id, streamer_games.c.streamer_id == SHEETS_STREAMER_ID)
                     .limit(1)
                 )
                 current = sg_result.scalar_one_or_none()
                 if current is False:
                     await session.execute(
                         streamer_games.update()
-                        .where(streamer_games.c.game_id == game.id, streamer_games.c.streamer_id == 1)
+                        .where(streamer_games.c.game_id == game.id, streamer_games.c.streamer_id == SHEETS_STREAMER_ID)
                         .values(interested=False)
                     )
         await session.flush()
@@ -314,7 +314,7 @@ async def sync_releases_safe() -> None:
 
             sg_result = await session.execute(
                 select(streamer_games.c.interested)
-                .where(streamer_games.c.game_id == game.id, streamer_games.c.streamer_id == 1)
+                .where(streamer_games.c.game_id == game.id, streamer_games.c.streamer_id == SHEETS_STREAMER_ID)
                 .limit(1)
             )
             interested = sg_result.scalar_one_or_none() or False

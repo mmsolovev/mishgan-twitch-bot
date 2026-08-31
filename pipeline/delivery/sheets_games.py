@@ -10,13 +10,14 @@ from database.models import (
     GameStats,
     GameMetadataHLTB,
     GameMetadataIGDB,
+    StreamGame,
     streamer_games,
     game_genres,
     game_platforms,
     Genre,
     Platform,
 )
-from config.settings import SPREADSHEET_NAME, GAMES_SHEET_NAME
+from config.settings import SHEETS_STREAMER_ID, SPREADSHEET_NAME, GAMES_SHEET_NAME
 from pipeline.delivery.sheets_utils import (
     build_hyperlink_formula,
     comparable_row,
@@ -49,12 +50,15 @@ async def _build_tags_text(session, game_id: int) -> str:
 async def _get_game_streamer_flags(session, game_id: int) -> dict:
     result = await session.execute(
         select(
-            func.bool_or(streamer_games.c.liked),
-            func.bool_or(streamer_games.c.completed),
-        ).where(streamer_games.c.game_id == game_id)
+            streamer_games.c.liked,
+            streamer_games.c.completed,
+        ).where(
+            streamer_games.c.game_id == game_id,
+            streamer_games.c.streamer_id == SHEETS_STREAMER_ID,
+        ).limit(1)
     )
-    row = result.one()
-    return {"liked": bool(row[0]), "completed": bool(row[1])}
+    row = result.first()
+    return {"liked": bool(row[0]) if row else False, "completed": bool(row[1]) if row else False}
 
 
 def _build_games_dataset(rows):
@@ -90,7 +94,7 @@ async def _sync_game_manual_fields_from_sheet(session, existing_rows):
 
         await session.execute(
             streamer_games.update()
-            .where(streamer_games.c.game_id == game.id, streamer_games.c.streamer_id == 1)
+            .where(streamer_games.c.game_id == game.id, streamer_games.c.streamer_id == SHEETS_STREAMER_ID)
             .values(liked=liked, completed=completed)
         )
 
@@ -210,7 +214,9 @@ async def sync_games() -> None:
     sheet = client.open(SPREADSHEET_NAME).worksheet(GAMES_SHEET_NAME)
 
     async with AsyncSessionLocal() as session:
-        result = await session.execute(select(Game).where(Game.is_active == True))
+        result = await session.execute(
+            select(Game).join(StreamGame, StreamGame.game_id == Game.id).distinct()
+        )
         games = result.scalars().unique().all()
 
         dataset_rows = []
@@ -277,7 +283,9 @@ async def sync_games_safe() -> None:
         await _sync_game_manual_fields_from_sheet(session, existing)
         await session.commit()
 
-        result = await session.execute(select(Game).where(Game.is_active == True))
+        result = await session.execute(
+            select(Game).join(StreamGame, StreamGame.game_id == Game.id).distinct()
+        )
         games = result.scalars().unique().all()
 
         dataset_rows = []

@@ -107,8 +107,8 @@ def build_recommenders_text(recommender_data: list[dict]) -> str:
     return ", ".join(result)
 
 
-def format_rating_value(value: str | None) -> str:
-    value = (value or "").strip()
+def format_rating_value(value: str | int | float | None) -> str:
+    value = "" if value is None else str(value).strip()
     if not value:
         return ""
     return value.split("|", 1)[0].strip()
