@@ -2,6 +2,7 @@ from twitchio.ext import commands
 
 from services.command_registry import register_command
 from services.streams_service import build_stream_response, build_streams_help_message
+from utils.args import clean_text
 from utils.cooldowns import check_cooldown
 from utils.delays import human_delay
 
@@ -22,7 +23,7 @@ def setup(bot):
 
         await human_delay()
 
-        date_query = (date_query or "").strip()
+        date_query = clean_text(date_query)
 
         if not date_query:
             await ctx.send(build_streams_help_message())

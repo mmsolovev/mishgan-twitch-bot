@@ -33,6 +33,11 @@ else:
     TWITCH_CHANNELS = _parse_channels(TWITCH_CHANNEL) if TWITCH_CHANNEL else []
 
 TWITCH_PRIMARY_CHANNEL = TWITCH_CHANNELS[0] if TWITCH_CHANNELS else TWITCH_CHANNEL
+
+# Каналы, в которых бот отправляет сообщения через Send Chat Message API
+# (появляется Chat Bot Badge). Пустое значение = функция выключена.
+TWITCH_BOT_BADGE_CHANNELS = _parse_channels(os.getenv("TWITCH_BOT_BADGE_CHANNELS"))
+
 CLIENT_ID = os.getenv("CLIENT_ID")
 CLIENT_SECRET = os.getenv("CLIENT_SECRET")
 IGDB_CLIENT_ID = os.getenv("IGDB_CLIENT_ID") or CLIENT_ID

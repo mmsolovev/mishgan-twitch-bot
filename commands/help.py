@@ -2,6 +2,7 @@ from sqlalchemy import select
 from twitchio.ext import commands
 
 from config.settings import GAMES_SHEET_URL
+from utils.args import split_command_args
 from utils.cooldowns import check_cooldown
 from utils.delays import human_delay
 
@@ -56,7 +57,7 @@ def setup(bot):
         if not check_cooldown(ctx, "команды", 5):
             return
 
-        args = ctx.message.content.split()[1:]
+        args = split_command_args(ctx.message.content)
 
         await human_delay()
 
