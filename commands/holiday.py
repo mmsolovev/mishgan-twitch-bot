@@ -1,5 +1,6 @@
 from twitchio.ext import commands
 
+from utils.args import split_command_args
 from utils.cooldowns import check_cooldown
 from utils.delays import human_delay
 from services.command_registry import register_command
@@ -27,7 +28,7 @@ def setup(bot):
         if not check_cooldown(ctx, "праздник", 5):
             return
 
-        args = ctx.message.content.split()[1:]
+        args = split_command_args(ctx.message.content)
 
         await human_delay()
 
@@ -36,11 +37,11 @@ def setup(bot):
             holiday = await get_random_today()
 
             if not holiday:
-                await ctx.send("MrDestructoid Сегодня праздников нет")
+                await ctx.send("Сегодня праздников не найдено")
                 return
 
             await ctx.send(
-                f"MrDestructoid Сегодня: {holiday['name']} | {holiday['desc']}"
+                f"Сегодня: {holiday['name']} | {holiday['desc']}"
             )
             return
 
@@ -52,7 +53,7 @@ def setup(bot):
             names = await get_all_today_names()
 
             if not names:
-                await ctx.send("MrDestructoid Сегодня праздников нет")
+                await ctx.send("Сегодня праздников не найдено")
                 return
 
             await ctx.send("Сегодня: " + " | ".join(names))
@@ -63,7 +64,7 @@ def setup(bot):
             holidays = await get_holidays_by_date(arg1)
 
             if not holidays:
-                await ctx.send("MrDestructoid Нет праздников на эту дату")
+                await ctx.send("Не найдено праздников на эту дату")
                 return
 
             # дата + номер
@@ -72,7 +73,7 @@ def setup(bot):
                 holiday = await get_by_index(arg1, idx)
 
                 if not holiday:
-                    await ctx.send("MrDestructoid Нет такого номера damn")
+                    await ctx.send("Нет такого номера damn")
                     return
 
                 await ctx.send(
@@ -93,7 +94,7 @@ def setup(bot):
             holiday = await get_by_index(today, idx)
 
             if not holiday:
-                await ctx.send("MrDestructoid Нет такого номера damn")
+                await ctx.send("Нет такого номера damn")
                 return
 
             await ctx.send(
@@ -105,7 +106,7 @@ def setup(bot):
         results = await search_holiday(arg1)
 
         if not results:
-            await ctx.send("MrDestructoid Ничего не найдено damn")
+            await ctx.send("Ничего не найдено damn")
             return
 
         formatted = [

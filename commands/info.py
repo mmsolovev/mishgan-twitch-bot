@@ -2,6 +2,7 @@ from twitchio.ext import commands
 
 from services.command_registry import register_command
 from services.info_service import resolve_query, format_for_chat
+from utils.args import clean_text
 from utils.cooldowns import check_cooldown
 from utils.delays import human_delay
 
@@ -22,7 +23,7 @@ def setup(bot):
 
         await human_delay()
 
-        query = args[-1] if args else "стример"
+        query = clean_text(args[-1]) if args else "стример"
 
         result = resolve_query(query)
 

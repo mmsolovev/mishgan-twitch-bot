@@ -21,6 +21,8 @@ class EventSubService:
         self.collector = RuntimeStreamCollector(bot)
         self.connected = False
         self.subscriptions = {}
+        self.watchdog_task = None
+        self._watchdog_interval_seconds = 60
         self.channel_state = {}
         self.broadcaster_id = None
         self.moderator_id = None
@@ -34,7 +36,6 @@ class EventSubService:
             "raid": self.on_raid,
             "followV2": self.on_follow,
             "channel_shoutout_create": self.on_shoutout_create,
-            "channel_shoutout_receive": self.on_shoutout_receive,
         }
 
     async def setup(self):
@@ -56,6 +57,9 @@ class EventSubService:
             f"[EventSub] setup complete for {target_user.name} "
             f"(broadcaster_id={target_user.id}, bot_id={bot_user.id})"
         )
+
+        if self.connected:
+            await self.ensure_watchdog_started()
 
     async def resolve_users(self):
         users = await self.bot.fetch_users(
@@ -112,11 +116,6 @@ class EventSubService:
                 moderator_id,
                 settings.TWITCH_ACCESS_TOKEN,
             ),
-            "channel.shoutout.receive": lambda: self.client.subscribe_channel_shoutout_receive(
-                broadcaster_id,
-                moderator_id,
-                settings.TWITCH_ACCESS_TOKEN,
-            ),
         }
 
         results = {}
@@ -130,6 +129,75 @@ class EventSubService:
                 self.logger.warning("[EventSub] failed to subscribe %s: %s", name, exc)
 
         return results
+
+    async def ensure_watchdog_started(self):
+        if self.watchdog_task and not self.watchdog_task.done():
+            return
+        self.watchdog_task = self.bot.loop.create_task(self._watchdog_loop())
+        self.logger.info(
+            "[EventSub] watchdog started with interval %ss",
+            self._watchdog_interval_seconds,
+        )
+
+    async def _watchdog_loop(self):
+        try:
+            while True:
+                await asyncio.sleep(self._watchdog_interval_seconds)
+                if not self._is_eventsub_healthy():
+                    self.logger.warning(
+                        "[EventSub] watchdog detected dead websocket, restarting EventSub"
+                    )
+                    await self.restart()
+        except asyncio.CancelledError:
+            raise
+        except Exception as exc:
+            self.logger.warning("[EventSub] watchdog loop failed: %s", exc)
+
+    def _is_eventsub_healthy(self) -> bool:
+        sockets = getattr(self.client, "_sockets", None)
+        if not sockets:
+            return False
+
+        for sock in sockets:
+            pump = getattr(sock, "_pump_task", None)
+            if bool(sock.is_connected) and (pump is None or not pump.done()):
+                return True
+        return False
+
+    async def restart(self):
+        try:
+            if self.watchdog_task and not self.watchdog_task.done():
+                self.watchdog_task.cancel()
+                try:
+                    await self.watchdog_task
+                except asyncio.CancelledError:
+                    pass
+            self.watchdog_task = None
+
+            for sock in getattr(self.client, "_sockets", []):
+                pump = getattr(sock, "_pump_task", None)
+                if pump and not pump.done():
+                    pump.cancel()
+                try:
+                    await sock._sock.close()
+                except Exception:
+                    pass
+            self.client._sockets = []
+
+            if not self.broadcaster_id or not self.moderator_id:
+                await self.setup()
+                return
+
+            results = await self.subscribe_topics(self.broadcaster_id, self.moderator_id)
+            self.connected = any(results.values())
+            self.subscriptions = results
+
+            if self.connected:
+                await self.ensure_watchdog_started()
+            self.logger.info("[EventSub] EventSub restarted, connected=%s", self.connected)
+        except Exception as exc:
+            self.logger.warning("[EventSub] restart failed, will retry next cycle: %s", exc)
+            await self.ensure_watchdog_started()
 
     async def dispatch(self, event_name: str, payload):
         handler = self._handlers.get(event_name)
@@ -219,14 +287,6 @@ class EventSubService:
         self.last_shoutout_at = time.time()
         self.next_shoutout_available_at = data.cooldown_ends_at.timestamp()
 
-    async def on_shoutout_receive(self, data):
-        self.logger.info(
-            "[EventSub] channel.shoutout.receive: %s -> %s viewer_count=%s",
-            data.from_broadcaster.name,
-            data.broadcaster.name,
-            data.viewer_count,
-        )
-
     async def maybe_send_raid_shoutout(self, data):
         raider_login = data.raider.name.lower()
         now = time.time()
@@ -305,6 +365,16 @@ class EventSubService:
 
         message = await self.build_game_change_message(game_name)
         self.logger.info("[EventSub] game-change chat message: %s", message)
+
+        if settings.TWITCH_PRIMARY_CHANNEL.casefold() in {
+            channel.casefold() for channel in (settings.TWITCH_BOT_BADGE_CHANNELS or [])
+        }:
+            from services import chat_sender
+            sent = await chat_sender.send_message(settings.TWITCH_PRIMARY_CHANNEL, message)
+            if sent:
+                return
+            self.logger.warning("[EventSub] game-change API send failed, falling back to IRC")
+
         await channel.send(message)
 
     async def build_game_change_message(self, game_name: str) -> str:
