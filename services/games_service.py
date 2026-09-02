@@ -202,7 +202,7 @@ def _find_similar_matches(query: str, ranked_games: list[GameLookupResult]) -> l
 def _format_game_stats(match: GameLookupResult) -> str:
     parts = [
         f"Игра: {match.name}",
-        f"Стримов по игре: {match.streams_count}",
+        f"Было стримов по игре: {match.streams_count}",
         f"Последний стрим: {_format_date(match.last_stream)}",
         f"Времени в игре: {format_hours_minutes(match.hours_streamed) or 'н/д'} (#{match.rank})",
     ]

@@ -382,12 +382,14 @@ class EventSubService:
         message_parts = []
 
         if game_lookup is None or game_lookup.streams_count <= 0:
-            message_parts.append(f"MrDestructoid Игра {game_name} на канале впервые")
+            message_parts.append(f"Игра: {game_name} | На канале впервые")
         else:
+            rank_suffix = f" (#{game_lookup.rank})" if game_lookup.rank else ""
             message_parts.append(
-                f"MrDestructoid Игра {game_lookup.name} уже была на стриме раз: {game_lookup.streams_count}, "
-                f"часов в игре: {self._format_hours(game_lookup.hours_streamed)}, "
-                f"последний стрим {self._format_date(game_lookup.last_stream)}"
+                f"Игра: {game_lookup.name} | "
+                f"Было стримов по игре: {game_lookup.streams_count} | "
+                f"Последний стрим: {self._format_date(game_lookup.last_stream)} | "
+                f"Времени в игре: {self._format_hours_minutes(game_lookup.hours_streamed)}{rank_suffix}"
             )
 
         hltb_summary = await get_hltb_summary(game_name)
@@ -402,12 +404,18 @@ class EventSubService:
         return " | ".join(message_parts)
 
     @staticmethod
-    def _format_hours(value: float | None) -> str:
+    def _format_hours_minutes(value: float | None) -> str:
         if value is None:
             return "н/д"
 
-        formatted = f"{value:.1f}".rstrip("0").rstrip(".")
-        return formatted
+        total_minutes = round(value * 60)
+        hours = total_minutes // 60
+        minutes = total_minutes % 60
+        if hours and minutes:
+            return f"{hours} ч {minutes} м"
+        if hours:
+            return f"{hours} ч"
+        return f"{minutes} м"
 
     @staticmethod
     def _format_date(value) -> str:
