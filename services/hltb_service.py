@@ -1,5 +1,7 @@
 import asyncio
+import datetime
 import importlib
+import json
 import re
 import subprocess
 import sys
@@ -357,11 +359,27 @@ async def _store_and_return(query: str, existing_game=None) -> tuple[str | None,
                 )
             ).scalar_one_or_none()
 
+            igdb_score = None
+            raw_payload_data = None
+            if igdb_meta.source_payload:
+                try:
+                    raw_payload_data = json.loads(igdb_meta.source_payload)
+                    payload_score = raw_payload_data.get("total_rating")
+                    if payload_score is not None:
+                        igdb_score = float(payload_score)
+                except (TypeError, ValueError, json.JSONDecodeError):
+                    raw_payload_data = None
+                    igdb_score = None
+
             fields = {
+                "igdb_name": igdb_meta.title,
                 "release_date": igdb_meta.release_date,
                 "steam_url": igdb_meta.steam_url,
+                "igdb_score": igdb_score,
                 "description_en": igdb_meta.description_short,
                 "cover_url": igdb_meta.cover_url,
+                "raw_payload": raw_payload_data,
+                "synced_at": datetime.datetime.utcnow(),
             }
             if holder_game_id is None:
                 fields["igdb_id"] = igdb_id
