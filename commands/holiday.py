@@ -28,7 +28,7 @@ def setup(bot):
         if not check_cooldown(ctx, "праздник", 5):
             return
 
-        args = split_command_args(ctx.message.content)
+        args = split_command_args(ctx.message.text)
 
         await human_delay()
 

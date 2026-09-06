@@ -43,8 +43,7 @@ async def get_or_create_user(session: AsyncSession, chatter) -> User:
             twitch_user_id=chatter.id,
             login=login,
             display_name=chatter.display_name,
-            is_streamer=getattr(chatter, "_is_broadcaster", False)
-            or getattr(chatter, "_is_verified", False),
+            is_streamer=getattr(chatter, "broadcaster", False),
             last_seen_at=now,
             created_at=now,
         )

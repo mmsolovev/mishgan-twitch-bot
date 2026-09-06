@@ -52,12 +52,12 @@ def setup(bot):
         aliases = ["команда", "помощь", "help"],
     )
 
-    @commands.command(name="команды", aliases=("команда", "помощь", "help"))
+    @commands.command(name="команды", aliases=["команда", "помощь", "help"])
     async def commands_command(ctx):
         if not check_cooldown(ctx, "команды", 5):
             return
 
-        args = split_command_args(ctx.message.content)
+        args = split_command_args(ctx.message.text)
 
         await human_delay()
 

@@ -6,7 +6,7 @@ from services.command_registry import register_command
 
 
 def has_access(ctx):
-    return ctx.author.name in ADMINS or ctx.author.is_mod
+    return ctx.author.name in ADMINS or ctx.author.moderator
 
 
 def setup(bot):

@@ -18,7 +18,7 @@ from utils.delays import human_delay
 
 
 def has_access(ctx) -> bool:
-    return ctx.author.is_mod or ctx.author.name in ALLOWED_USERS
+    return ctx.author.moderator or ctx.author.name in ALLOWED_USERS
 
 
 def setup(bot):

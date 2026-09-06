@@ -22,7 +22,7 @@ def setup(bot):
         if not check_cooldown(ctx, "r", 3):
             return
 
-        reply_id, reply_author, reply_body = extract_reply_message_data(ctx.message.tags)
+        reply_id, reply_author, reply_body = extract_reply_message_data(ctx.message)
         if not reply_id or not reply_author or reply_body is None:
             await ctx.send("MrDestructoid Используй !r ответом на сообщение")
             return
