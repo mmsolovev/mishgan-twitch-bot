@@ -17,19 +17,6 @@ _processed_reply_ids: dict[str, float] = {}
 _processed_reply_lock = asyncio.Lock()
 
 
-def _unescape_twitch_tag(value: str) -> str:
-    if not value:
-        return ""
-
-    return (
-        value.replace(r"\s", " ")
-        .replace(r"\:", ";")
-        .replace(r"\r", "\r")
-        .replace(r"\n", "\n")
-        .replace(r"\\", "\\")
-    )
-
-
 def _translate_en_to_ru(text: str) -> str:
     return text.translate(EN_TO_RU)
 
@@ -98,19 +85,20 @@ def _truncate_response(author_name: str, text: str) -> str:
     return prefix + text[: available - 3].rstrip() + "..."
 
 
-def extract_reply_message_data(tags: dict) -> tuple[str | None, str | None, str | None]:
-    reply_id = tags.get("reply-parent-msg-id")
-    reply_author = (
-        tags.get("reply-parent-display-name")
-        or tags.get("reply-parent-user-login")
-        or tags.get("reply-parent-user-name")
-    )
-    reply_body = tags.get("reply-parent-msg-body")
+def extract_reply_message_data(message) -> tuple[str | None, str | None, str | None]:
+    reply = getattr(message, "reply", None)
+    if reply is None:
+        return None, None, None
+
+    reply_id = getattr(reply, "parent_message_id", None)
+    parent_user = getattr(reply, "parent_user", None)
+    reply_author = parent_user.display_name if parent_user else None
+    reply_body = getattr(reply, "parent_message_body", None)
 
     if not reply_id or not reply_author or reply_body is None:
         return None, None, None
 
-    return reply_id, _unescape_twitch_tag(reply_author), _unescape_twitch_tag(reply_body)
+    return reply_id, reply_author, reply_body
 
 
 async def claim_reply_translation(reply_id: str) -> bool:

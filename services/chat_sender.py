@@ -47,11 +47,11 @@ async def resolve_user_id(login: str) -> str | None:
     return user_id
 
 
-async def send_message(broadcaster_login: str, message: str) -> bool:
+async def send_message(broadcaster_login: str, message: str) -> str | None:
     """Отправить сообщение через Send Chat Message API (даёт Chat Bot Badge).
 
-    Возвращает True при успешной доставке через API, иначе False (caller может
-    сделать fallback на IRC).
+    Возвращает message_id при успешной доставке через API, иначе None
+    (caller может сделать fallback).
     """
     try:
         sender_id = await resolve_user_id(settings.TWITCH_NICK)
@@ -59,7 +59,7 @@ async def send_message(broadcaster_login: str, message: str) -> bool:
         if not sender_id or not broadcaster_id:
             logger.warning("send_message skipped: could not resolve ids (sender=%s, bcast=%s)",
                            sender_id, broadcaster_id)
-            return False
+            return None
 
         token = await get_app_access_token()
         headers = {
@@ -78,11 +78,11 @@ async def send_message(broadcaster_login: str, message: str) -> bool:
                 body = await resp.json()
 
         if resp.status == 200 and body.get("data") and body["data"][0].get("is_sent"):
-            return True
+            return body["data"][0].get("message_id")
 
         drop = body.get("data", [{}])[0].get("drop_reason")
         logger.warning("send_message not sent: status=%s drop_reason=%s", resp.status, drop)
-        return False
+        return None
     except Exception as exc:
         logger.warning("send_message exception: %s", exc)
-        return False
+        return None

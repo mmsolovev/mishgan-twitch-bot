@@ -31,12 +31,12 @@ class RuntimeStreamCollector:
 
         storage.prepare_storage_dir()
 
-    async def bootstrap(self, broadcaster_id: int, token: str):
+    async def bootstrap(self, broadcaster_id: int):
         self.broadcaster_id = int(broadcaster_id)
         self.active_session = storage.load_active_session()
         ensure_session_shape(self.active_session)
 
-        live_stream = await sampler.fetch_live_stream_with_refresh(self.bot, settings.TWITCH_ACCESS_TOKEN)
+        live_stream = await sampler.fetch_live_stream_with_refresh(self.bot)
         if self.active_session and live_stream and str(self.active_session.get("stream_id")) == str(live_stream.id):
             self.logger.info("Recovered active session for current live stream %s", live_stream.id)
             self._record_event("collector.bootstrap.recovered", {"stream_id": str(live_stream.id)})
@@ -321,7 +321,7 @@ class RuntimeStreamCollector:
         current_stream = stream_snapshot
         if current_stream is None:
             try:
-                current_stream = await sampler.fetch_live_stream_with_refresh(self.bot, settings.TWITCH_ACCESS_TOKEN)
+                current_stream = await sampler.fetch_live_stream_with_refresh(self.bot)
             except Exception as exc:
                 self.logger.warning("Failed to fetch live stream snapshot for %s: %s", reason, exc)
                 current_stream = None
@@ -339,7 +339,7 @@ class RuntimeStreamCollector:
             self.logger.info("Live stream snapshot unavailable for %s", reason)
 
         if self.followers_sampling_enabled:
-            follower_count = await sampler.fetch_followers_count(self.bot, self.broadcaster_id, settings.TWITCH_ACCESS_TOKEN)
+            follower_count = await sampler.fetch_followers_count(self.bot, self.broadcaster_id)
             if follower_count is not None:
                 self._append_follower_sample(follower_count, sample_timestamp, reason)
             else:

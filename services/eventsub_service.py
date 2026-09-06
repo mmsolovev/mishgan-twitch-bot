@@ -3,13 +3,15 @@ import random
 import re
 import time
 
-from twitchio.ext.eventsub.websocket import EventSubWSClient
+from twitchio import eventsub
 from twitchio.http import Route
 
 import config.settings as settings
 from services.games_service import find_game_lookup
 from services.hltb_service import get_hltb_summary, is_non_game_category
 from runtime.collector import RuntimeStreamCollector
+from services import chat_sender
+from services.token_service import validate_token
 from utils.logger import get_logger
 
 
@@ -17,12 +19,9 @@ class EventSubService:
     def __init__(self, bot):
         self.bot = bot
         self.logger = get_logger("eventsub")
-        self.client = EventSubWSClient(bot)
         self.collector = RuntimeStreamCollector(bot)
         self.connected = False
         self.subscriptions = {}
-        self.watchdog_task = None
-        self._watchdog_interval_seconds = 60
         self.channel_state = {}
         self.broadcaster_id = None
         self.moderator_id = None
@@ -34,7 +33,7 @@ class EventSubService:
             "stream_start": self.on_stream_start,
             "stream_end": self.on_stream_end,
             "raid": self.on_raid,
-            "followV2": self.on_follow,
+            "follow": self.on_follow,
             "channel_shoutout_create": self.on_shoutout_create,
         }
 
@@ -43,29 +42,50 @@ class EventSubService:
             print("[EventSub] skipped: TWITCH_TOKEN is missing")
             return
 
+        await self._check_token_scopes()
+
         target_user, bot_user = await self.resolve_users()
         self.broadcaster_id = int(target_user.id)
         self.moderator_id = int(bot_user.id)
         await self.prime_channel_state(target_user.id)
-        await self.collector.bootstrap(target_user.id, settings.TWITCH_ACCESS_TOKEN)
+        await self.collector.bootstrap(target_user.id)
         results = await self.subscribe_topics(target_user.id, bot_user.id)
 
         self.connected = any(results.values())
         self.subscriptions = results
 
         self.logger.info(
-            f"[EventSub] setup complete for {target_user.name} "
-            f"(broadcaster_id={target_user.id}, bot_id={bot_user.id})"
+            "[EventSub] setup complete for %s (broadcaster_id=%s, bot_id=%s)",
+            target_user.name,
+            target_user.id,
+            bot_user.id,
         )
 
-        if self.connected:
-            await self.ensure_watchdog_started()
+    async def _check_token_scopes(self) -> None:
+        validation = await validate_token(settings.TWITCH_ACCESS_TOKEN or "")
+        if not validation:
+            self.logger.warning("[EventSub] could not validate token scopes")
+            return
+
+        granted = set(validation.get("scopes") or [])
+        required = {
+            "channel.chat.message": "user:read:chat",
+            "channel.follow": "moderator:read:followers",
+            "channel.shoutout.create": "moderator:read:shoutouts",
+        }
+        for name, scope in required.items():
+            if scope not in granted:
+                self.logger.warning(
+                    "[EventSub] user token is missing scope '%s' required for subscription '%s'. "
+                    "Re-authorize the token via 'utils/authorize_twitch_token.py'",
+                    scope,
+                    name,
+                )
 
     async def resolve_users(self):
         users = await self.bot.fetch_users(
-            names=[settings.TWITCH_PRIMARY_CHANNEL, settings.TWITCH_NICK],
-            token=settings.TWITCH_ACCESS_TOKEN,
-            force=True,
+            logins=[settings.TWITCH_PRIMARY_CHANNEL, settings.TWITCH_NICK],
+            token_for=self.bot.bot_id,
         )
 
         by_name = {user.name.lower(): user for user in users}
@@ -86,118 +106,83 @@ class EventSubService:
         return target_user, bot_user
 
     async def prime_channel_state(self, broadcaster_id: int):
-        channel_info = await self.bot.fetch_channel(str(broadcaster_id), token=settings.TWITCH_ACCESS_TOKEN)
+        channel_info = await self.bot.fetch_channel(str(broadcaster_id), token_for=self.bot.bot_id)
         self.channel_state = {
             "title": channel_info.title,
             "category_name": channel_info.game_name,
             "category_id": str(channel_info.game_id),
         }
 
+    async def _resolve_channel_id(self, channel_name: str) -> int | None:
+        try:
+            users = await self.bot.fetch_users(logins=[channel_name], token_for=self.bot.bot_id)
+            for user in users:
+                if user.name.casefold() == channel_name.casefold():
+                    return int(user.id)
+        except Exception as exc:
+            self.logger.warning("[EventSub] failed to resolve channel '%s': %s", channel_name, exc)
+        return None
+
     async def subscribe_topics(self, broadcaster_id: int, moderator_id: int):
-        subscriptions = {
-            "channel.update": lambda: self.client.subscribe_channel_update(broadcaster_id, settings.TWITCH_ACCESS_TOKEN),
-            "stream.online": lambda: self.client.subscribe_channel_stream_start(
-                broadcaster_id, settings.TWITCH_ACCESS_TOKEN
+        subscribers = {
+            "channel.update": eventsub.ChannelUpdateSubscription(
+                broadcaster_user_id=str(broadcaster_id)
             ),
-            "stream.offline": lambda: self.client.subscribe_channel_stream_end(
-                broadcaster_id, settings.TWITCH_ACCESS_TOKEN
+            "stream.online": eventsub.StreamOnlineSubscription(
+                broadcaster_user_id=str(broadcaster_id)
             ),
-            "channel.raid.to": lambda: self.client.subscribe_channel_raid(
-                settings.TWITCH_ACCESS_TOKEN,
-                to_broadcaster=broadcaster_id,
+            "stream.offline": eventsub.StreamOfflineSubscription(
+                broadcaster_user_id=str(broadcaster_id)
             ),
-            "channel.follow.v2": lambda: self.client.subscribe_channel_follows_v2(
-                broadcaster_id,
-                moderator_id,
-                settings.TWITCH_ACCESS_TOKEN,
+            "channel.raid.to": eventsub.ChannelRaidSubscription(
+                to_broadcaster_user_id=str(broadcaster_id)
             ),
-            "channel.shoutout.create": lambda: self.client.subscribe_channel_shoutout_create(
-                broadcaster_id,
-                moderator_id,
-                settings.TWITCH_ACCESS_TOKEN,
+            "channel.follow.v2": eventsub.ChannelFollowSubscription(
+                broadcaster_user_id=str(broadcaster_id),
+                moderator_user_id=str(moderator_id),
+            ),
+            "channel.shoutout.create": eventsub.ShoutoutCreateSubscription(
+                broadcaster_user_id=str(broadcaster_id),
+                moderator_user_id=str(moderator_id),
             ),
         }
 
         results = {}
-        for name, subscribe in subscriptions.items():
+        for name, payload in subscribers.items():
             try:
-                await subscribe()
+                await self.bot.subscribe_websocket(payload, as_bot=True)
                 results[name] = True
                 self.logger.info("[EventSub] subscribed: %s", name)
             except Exception as exc:
                 results[name] = False
                 self.logger.warning("[EventSub] failed to subscribe %s: %s", name, exc)
 
+        channels = settings.TWITCH_CHANNELS or [settings.TWITCH_PRIMARY_CHANNEL]
+        for channel_name in channels:
+            channel_id = await self._resolve_channel_id(channel_name)
+            if channel_id is None:
+                continue
+            payload = eventsub.ChatMessageSubscription(
+                broadcaster_user_id=str(channel_id),
+                user_id=self.bot.bot_id,
+            )
+            name = f"channel.chat.message.{channel_name}"
+            try:
+                await self.bot.subscribe_websocket(payload, as_bot=True)
+                results[name] = True
+                self.logger.info("[EventSub] subscribed: %s", name)
+            except Exception as exc:
+                results[name] = False
+                self.logger.warning(
+                    "[EventSub] failed to subscribe %s: %s. "
+                    "Hint: requires scope 'user:read:chat' on the bot user token and "
+                    "the bot being a moderator/broadcaster of the channel. "
+                    "Re-authorize via 'utils/authorize_twitch_token.py'",
+                    name,
+                    exc,
+                )
+
         return results
-
-    async def ensure_watchdog_started(self):
-        if self.watchdog_task and not self.watchdog_task.done():
-            return
-        self.watchdog_task = self.bot.loop.create_task(self._watchdog_loop())
-        self.logger.info(
-            "[EventSub] watchdog started with interval %ss",
-            self._watchdog_interval_seconds,
-        )
-
-    async def _watchdog_loop(self):
-        try:
-            while True:
-                await asyncio.sleep(self._watchdog_interval_seconds)
-                if not self._is_eventsub_healthy():
-                    self.logger.warning(
-                        "[EventSub] watchdog detected dead websocket, restarting EventSub"
-                    )
-                    await self.restart()
-        except asyncio.CancelledError:
-            raise
-        except Exception as exc:
-            self.logger.warning("[EventSub] watchdog loop failed: %s", exc)
-
-    def _is_eventsub_healthy(self) -> bool:
-        sockets = getattr(self.client, "_sockets", None)
-        if not sockets:
-            return False
-
-        for sock in sockets:
-            pump = getattr(sock, "_pump_task", None)
-            if bool(sock.is_connected) and (pump is None or not pump.done()):
-                return True
-        return False
-
-    async def restart(self):
-        try:
-            if self.watchdog_task and not self.watchdog_task.done():
-                self.watchdog_task.cancel()
-                try:
-                    await self.watchdog_task
-                except asyncio.CancelledError:
-                    pass
-            self.watchdog_task = None
-
-            for sock in getattr(self.client, "_sockets", []):
-                pump = getattr(sock, "_pump_task", None)
-                if pump and not pump.done():
-                    pump.cancel()
-                try:
-                    await sock._sock.close()
-                except Exception:
-                    pass
-            self.client._sockets = []
-
-            if not self.broadcaster_id or not self.moderator_id:
-                await self.setup()
-                return
-
-            results = await self.subscribe_topics(self.broadcaster_id, self.moderator_id)
-            self.connected = any(results.values())
-            self.subscriptions = results
-
-            if self.connected:
-                await self.ensure_watchdog_started()
-            self.logger.info("[EventSub] EventSub restarted, connected=%s", self.connected)
-        except Exception as exc:
-            self.logger.warning("[EventSub] restart failed, will retry next cycle: %s", exc)
-            await self.ensure_watchdog_started()
 
     async def dispatch(self, event_name: str, payload):
         handler = self._handlers.get(event_name)
@@ -205,7 +190,7 @@ class EventSubService:
             self.logger.info("[EventSub] no handler for %s", event_name)
             return
 
-        await handler(payload.data)
+        await handler(payload)
 
     async def on_channel_update(self, data):
         previous_title = self.channel_state.get("title")
@@ -262,8 +247,8 @@ class EventSubService:
     async def on_raid(self, data):
         self.logger.info(
             "[EventSub] channel.raid: %s -> %s viewers=%s",
-            data.raider.name,
-            data.reciever.name,
+            data.from_broadcaster.name,
+            data.to_broadcaster.name,
             data.viewer_count,
         )
         await self.maybe_send_raid_shoutout(data)
@@ -285,10 +270,10 @@ class EventSubService:
             data.viewer_count,
         )
         self.last_shoutout_at = time.time()
-        self.next_shoutout_available_at = data.cooldown_ends_at.timestamp()
+        self.next_shoutout_available_at = data.cooldown_until.timestamp()
 
     async def maybe_send_raid_shoutout(self, data):
-        raider_login = data.raider.name.lower()
+        raider_login = data.from_broadcaster.name.lower()
         now = time.time()
 
         self.prune_recent_raids(now)
@@ -316,7 +301,7 @@ class EventSubService:
         await asyncio.sleep(delay)
 
         try:
-            await self.send_shoutout(data.raider.id, data.raider.name)
+            await self.send_shoutout(data.from_broadcaster.id, data.from_broadcaster.name)
         except Exception as exc:
             self.logger.warning("[EventSub] shoutout failed for %s: %s", raider_login, exc)
             return
@@ -338,12 +323,12 @@ class EventSubService:
         route = Route(
             "POST",
             "chat/shoutouts",
-            query=[
-                ("from_broadcaster_id", str(self.broadcaster_id)),
-                ("to_broadcaster_id", str(to_broadcaster_id)),
-                ("moderator_id", str(self.moderator_id)),
-            ],
-            token=settings.TWITCH_ACCESS_TOKEN,
+            params={
+                "from_broadcaster_id": str(self.broadcaster_id),
+                "to_broadcaster_id": str(to_broadcaster_id),
+                "moderator_id": str(self.moderator_id),
+            },
+            token_for=self.bot.bot_id,
         )
 
         try:
@@ -355,27 +340,30 @@ class EventSubService:
             ) from exc
 
     async def announce_game_change(self, game_name: str):
-        channel = self.bot.get_channel(settings.TWITCH_PRIMARY_CHANNEL)
-        if not channel:
-            self.logger.info(
-                "[EventSub] game-change message skipped: channel %s is not available",
-                settings.TWITCH_PRIMARY_CHANNEL,
-            )
-            return
-
         message = await self.build_game_change_message(game_name)
         self.logger.info("[EventSub] game-change chat message: %s", message)
 
         if settings.TWITCH_PRIMARY_CHANNEL.casefold() in {
             channel.casefold() for channel in (settings.TWITCH_BOT_BADGE_CHANNELS or [])
         }:
-            from services import chat_sender
             sent = await chat_sender.send_message(settings.TWITCH_PRIMARY_CHANNEL, message)
             if sent:
                 return
-            self.logger.warning("[EventSub] game-change API send failed, falling back to IRC")
+            self.logger.warning("[EventSub] game-change API send failed, falling back to v3 API")
 
-        await channel.send(message)
+        try:
+            target_user = await self.bot.fetch_users(
+                logins=[settings.TWITCH_PRIMARY_CHANNEL],
+                token_for=self.bot.bot_id,
+            )
+            chat_user = self.bot.create_partialuser(self.bot.bot_id)
+            await target_user[0].send_message(
+                message,
+                sender=chat_user,
+                token_for=self.bot.bot_id,
+            )
+        except Exception as exc:
+            self.logger.warning("[EventSub] game-change send failed: %s", exc)
 
     async def build_game_change_message(self, game_name: str) -> str:
         game_lookup = await find_game_lookup(game_name)
@@ -443,7 +431,7 @@ class EventSubService:
     async def fetch_live_stream_snapshot(self):
         streams = await self.bot.fetch_streams(
             user_logins=[settings.TWITCH_PRIMARY_CHANNEL],
-            token=settings.TWITCH_ACCESS_TOKEN,
+            token_for=self.bot.bot_id,
             type="live",
         )
         return streams[0] if streams else None
